@@ -1,0 +1,93 @@
+{
+  "updated": "2026-07-23T20:00:12Z",
+  "range": {
+    "from": "2026-07-23",
+    "to": "2026-08-04"
+  },
+  "events": [
+    {
+      "title": "Daily Standup",
+      "start": "2026-07-23T09:30:00Z",
+      "end": "2026-07-23T09:45:00Z",
+      "room": "Zoom"
+    },
+    {
+      "title": "Design Review \u2014 Dashboard",
+      "start": "2026-07-23T14:00:00Z",
+      "end": "2026-07-23T15:00:00Z",
+      "room": "Focus Room A"
+    },
+    {
+      "title": "Daily Standup",
+      "start": "2026-07-24T09:30:00Z",
+      "end": "2026-07-24T09:45:00Z",
+      "room": "Zoom"
+    },
+    {
+      "title": "1:1 with Priya",
+      "start": "2026-07-24T11:00:00Z",
+      "end": "2026-07-24T11:30:00Z",
+      "room": "Booth 3"
+    },
+    {
+      "title": "Daily Standup",
+      "start": "2026-07-25T09:30:00Z",
+      "end": "2026-07-25T09:45:00Z",
+      "room": "Zoom"
+    },
+    {
+      "title": "Lunch & Learn: flutter-pi",
+      "start": "2026-07-25T12:00:00Z",
+      "end": "2026-07-25T13:00:00Z",
+      "room": "Kitchen"
+    },
+    {
+      "title": "Daily Standup",
+      "start": "2026-07-26T09:30:00Z",
+      "end": "2026-07-26T09:45:00Z",
+      "room": "Zoom"
+    },
+    {
+      "title": "Sprint Retro",
+      "start": "2026-07-27T10:00:00Z",
+      "end": "2026-07-27T10:45:00Z",
+      "room": "All-Hands"
+    },
+    {
+      "title": "Estates walkaround",
+      "start": "2026-07-29T15:00:00Z",
+      "end": "2026-07-29T15:30:00Z",
+      "room": "Main Corridor"
+    },
+    {
+      "title": "Daily Standup",
+      "start": "2026-07-30T09:30:00Z",
+      "end": "2026-07-30T09:45:00Z",
+      "room": "Zoom"
+    },
+    {
+      "title": "Safeguarding Training",
+      "start": "2026-07-31T13:30:00Z",
+      "end": "2026-07-31T14:30:00Z",
+      "room": "Room 2.4"
+    },
+    {
+      "title": "Daily Standup",
+      "start": "2026-08-02T09:30:00Z",
+      "end": "2026-08-02T09:45:00Z",
+      "room": "Zoom"
+    },
+    {
+      "title": "Quarterly Planning",
+      "start": "2026-08-03T16:00:00Z",
+      "end": "2026-08-03T16:45:00Z",
+      "room": "Board Room"
+    },
+    {
+      "title": "New starter induction",
+      "start": "2026-08-04T11:00:00Z",
+      "end": "2026-08-04T11:30:00Z",
+      "room": "Reception"
+    }
+  ]
+}

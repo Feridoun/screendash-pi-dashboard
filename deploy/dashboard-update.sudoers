@@ -1,0 +1,6 @@
+# Installed to /etc/sudoers.d/dashboard-update (mode 0440).
+#
+# The self-updater runs unattended from a systemd timer and must restart the
+# dashboard without a password prompt. Scope it to exactly that -- not blanket
+# NOPASSWD -- so a compromised bundle can't use this to escalate.
+pi ALL=(root) NOPASSWD: /bin/systemctl restart dashboard.service, /usr/bin/systemctl restart dashboard.service

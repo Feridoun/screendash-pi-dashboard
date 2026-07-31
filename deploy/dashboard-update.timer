@@ -1,0 +1,14 @@
+[Unit]
+Description=Poll for dashboard updates
+
+[Timer]
+# First check shortly after boot, then every 15 minutes.
+OnBootSec=3min
+OnUnitActiveSec=15min
+# Spread load if several devices are ever deployed against one backend, and
+# avoid every Pi restarting its screen at exactly the same wall-clock second.
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

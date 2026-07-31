@@ -1,0 +1,81 @@
+name = "screendash"
+main = "src/index.js"
+compatibility_date = "2026-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# --- R2: the bucket the Pi polls -------------------------------------------
+[[r2_buckets]]
+binding = "DASH"
+bucket_name = "screendash"
+
+# --- Schedules --------------------------------------------------------------
+# Every 5 min : poll Gmail for new photos / notice: / pinphoto: emails.
+# Every 15 min: sync Google Calendar into events.json, and the Sheet into
+#               directory.json.
+# index.js branches on event.cron to decide which job to run.
+[triggers]
+crons = ["*/5 * * * *", "*/15 * * * *"]
+
+# --- Non-secret config -----------------------------------------------------
+[vars]
+# Only senders at these domains may write to the display (comma-separated).
+ALLOWED_SENDER_DOMAINS = "yourteam.dev"
+
+# Individual addresses honoured on top of the domains above. This is the
+# dashboard's own mailbox: removing a photo means opening that inbox and replying
+# to the mail that added it, so the reply's From is the mailbox itself rather than
+# an yourteam.dev address. Sending it at all requires the account password.
+ALLOWED_SENDER_ADDRESSES = "your-dashboard@gmail.com"
+
+# Gmail intake. Messages are selected with `-label:<GMAIL_PROCESSED_LABEL>` and
+# labelled only after they've been applied, so a failure retries next tick.
+GMAIL_PROCESSED_LABEL = "screendash-done"
+GMAIL_MAX_BATCH = "10"
+
+# Which Google calendar to read. Use "primary" for the account's own calendar,
+# or a calendar ID (looks like an email address) for a calendar shared with it.
+GOOGLE_CALENDAR_ID = "primary"
+
+# How many days of events to publish (must match CalendarGrid.span in the app).
+CALENDAR_SPAN_DAYS = "13"
+
+# The Google Sheet behind directory.json. The ID is the long token in the sheet's
+# URL: https://docs.google.com/spreadsheets/d/<THIS_BIT>/edit
+# Not a secret — access is gated by the OAuth token, not by knowing the ID. Leave
+# it empty to disable the sync and keep a hand-uploaded directory.json.
+DIRECTORY_SHEET_ID = ""
+# Tab name + columns. A:E covers Group | Name | Role | Phone | Email.
+DIRECTORY_SHEET_RANGE = "Directory!A:E"
+
+# Max images accepted from a single email.
+MAX_ATTACHMENTS = "10"
+
+# --- Telling photos from email decoration (see isDecorativeImage in intake.js).
+# Nothing smaller than this is stored at all: below it an image cannot read as
+# anything across a room on a 1080p panel, however it arrived.
+MIN_PHOTO_BYTES = "10240"
+# Images *embedded in the message body* (signature logos, cid: references) must
+# clear this higher bar. A pasted-inline holiday snap is megabytes and sails
+# past; a logo is a few KB and does not. Raise it if signature images still get
+# through; lower it if a genuine inline photo is being dropped.
+#
+# 80 KB is picked off this bucket's own numbers rather than a guess: the
+# signature images that prompted all this stored at 49.8 KB every time, and the
+# smallest genuine photo in rotation is 105 KB (everything else 176 KB+). This
+# sits in the middle of that gap, with real margin on both sides — 51200 would
+# have cleared the logos by 200 bytes, which is not a margin.
+MIN_INLINE_PHOTO_BYTES = "81920"
+# Max photos retained in rotation (oldest pruned beyond this). A pinned photo is
+# exempt, so the real ceiling is MAX_PHOTOS + 1 while an aged-out photo is pinned.
+MAX_PHOTOS = "40"
+# Longest edge for stored photos.
+MAX_IMAGE_EDGE = "1920"
+# Superseded notices kept inside motd.json, so the banner's arrows can step back
+# through what people missed.
+MAX_NOTICE_HISTORY = "5"
+
+# --- Secrets (set with `wrangler secret put <NAME>`; never commit these) ----
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#   GOOGLE_REFRESH_TOKEN     <- must cover calendar.readonly, gmail.modify AND
+#                               spreadsheets.readonly

@@ -1,0 +1,31 @@
+# Installed to /etc/systemd/system/dashboard-vnc-firewall.service.
+#
+# The admin VNC session (tigervncserver@:1, port 5901) binds all interfaces --
+# TigerVNC's systemd-integrated session only exposes a yes/no $localhost, not
+# a bind address, and localhost-only would defeat reaching it over the tailnet.
+# This unit is what actually keeps it off the LAN: accept on tailscale0, drop
+# everywhere else. Reachable only from the tailnet, which is how Guacamole on
+# the server gets to it (via its tailscale sidecar + relay).
+#
+# On ordering: INPUT jumps to tailscaled's own ts-input chain first, and that
+# chain already ACCEPTs everything arriving on tailscale0. So tailnet traffic
+# is accepted there and never reaches the rules below -- the -i tailscale0
+# ACCEPT rule here is redundant today (its packet counter stays at 0) and is
+# kept only so this unit still expresses the intended policy on its own if
+# tailscaled's chain changes. The DROP rule is the one doing the real work:
+# LAN traffic falls through ts-input unmatched and hits it.
+[Unit]
+Description=Restrict screendash admin VNC port (5901) to the tailnet
+After=tailscaled.service network-online.target
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 5901 -i tailscale0 -j ACCEPT
+ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 5901 -j DROP
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 5901 -i tailscale0 -j ACCEPT
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 5901 -j DROP
+
+[Install]
+WantedBy=multi-user.target

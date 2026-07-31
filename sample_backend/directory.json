@@ -1,0 +1,28 @@
+{
+  "updated": "2026-07-23T09:00:00Z",
+  "groups": [
+    {
+      "name": "Engineering",
+      "people": [
+        { "name": "Priya Shah", "role": "Eng Lead", "phone": "x4021", "email": "priya@yourteam.dev" },
+        { "name": "Sam Cole", "role": "Backend", "phone": "x4022", "email": "sam@yourteam.dev" },
+        { "name": "Noah Reyes", "role": "Firmware", "phone": "x4023", "email": "noah@yourteam.dev" }
+      ]
+    },
+    {
+      "name": "Design",
+      "people": [
+        { "name": "Lena Ortiz", "role": "Design Lead", "phone": "x4055", "email": "lena@yourteam.dev" },
+        { "name": "Theo Kim", "role": "Product Design", "phone": "x4056", "email": "theo@yourteam.dev" }
+      ]
+    },
+    {
+      "name": "Operations",
+      "people": [
+        { "name": "Front Desk", "phone": "x4000", "email": "reception@yourteam.dev" },
+        { "name": "Maya Chen", "role": "Office Manager", "phone": "x4010", "email": "maya@yourteam.dev" },
+        { "name": "IT Support", "phone": "x4099", "email": "it@yourteam.dev" }
+      ]
+    }
+  ]
+}

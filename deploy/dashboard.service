@@ -1,0 +1,36 @@
+[Unit]
+Description=Ambient Office Dashboard (flutter-pi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+# The AOT bundle produced by `flutterpi_tool build --arch=arm64 --release`.
+# `current` is a symlink into /home/pi/dashboard/versions/<version>; the
+# self-updater swaps it atomically and restarts us (see deploy/update.sh).
+# Do not point this at a real directory -- the symlink IS the update mechanism.
+#
+# flutterpi_tool ships a prebuilt aarch64 `flutter-pi` and libflutter_engine.so
+# INSIDE the bundle, so we run the bundled binary rather than one installed at
+# /usr/local/bin. That keeps runtime and app on the same version and lets a
+# rollback revert both together. Nothing installs /usr/local/bin/flutter-pi.
+Environment=LD_LIBRARY_PATH=/home/pi/dashboard/current
+ExecStart=/home/pi/dashboard/current/flutter-pi --release /home/pi/dashboard/current
+Restart=always
+RestartSec=3
+# flutter-pi must be DRM master — run on a real VT, not under a display manager.
+#
+# getty@tty1 MUST be disabled for this to work (deploy.sh provision does it).
+# If agetty still owns /dev/tty1, systemd blocks acquiring the TTY and never
+# execs: the unit reports "active (running)" with a MainPID whose /proc/<pid>/exe
+# still points at systemd itself, no flutter-pi process exists, and nothing is
+# logged. It looks like a silent hang rather than a conflict, so check
+# `fuser -v /dev/tty1` first if the screen stays blank.
+StandardInput=tty
+TTYPath=/dev/tty1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

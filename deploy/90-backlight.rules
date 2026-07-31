@@ -1,0 +1,9 @@
+# Allow the 'video' group to write panel brightness without root, so the Dart
+# DimController can dim a backlight-capable (DSI) panel. HDMI monitors use
+# `vcgencmd display_power` instead and don't need this rule.
+#
+# Install:  sudo cp deploy/90-backlight.rules /etc/udev/rules.d/
+#           sudo usermod -aG video pi
+#           sudo udevadm control --reload && sudo udevadm trigger
+SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness"
+SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"

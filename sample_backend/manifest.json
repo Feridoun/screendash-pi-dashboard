@@ -1,0 +1,8 @@
+{
+  "hash": "sample-0001",
+  "generated": "2026-07-23T09:00:00Z",
+  "photos": [
+    { "file": "2026-07-21-team-offsite.jpg", "w": 1920, "h": 1080, "bytes": 62335 },
+    { "file": "2026-07-22-lunch.jpg", "w": 1920, "h": 1080, "bytes": 60367 }
+  ]
+}

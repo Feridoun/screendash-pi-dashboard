@@ -1,0 +1,16 @@
+#!/bin/sh
+# ~/.vnc/xstartup for the screendash admin VNC session (:1, port 5901).
+#
+# Deliberately minimal: a titlebar-less WM and one xterm. Chromium is NOT
+# auto-launched here -- on a Pi 3B with ~1GB RAM, running it unattended
+# alongside flutter-pi is a real memory risk (see docs/captive-portal.md).
+# Launch it by hand from the xterm when actually needed, and close it when
+# done; the session's systemd instance carries a MemoryMax cap so a runaway
+# Chromium gets OOM-killed inside its own cgroup instead of taking the
+# kiosk down.
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+matchbox-window-manager -use_titlebar no &
+xterm -geometry 100x30+10+10 -T "screendash admin" &
+wait

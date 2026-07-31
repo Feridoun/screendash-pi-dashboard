@@ -1,0 +1,37 @@
+# Append to /boot/firmware/config.txt on the Pi (Bookworm path).
+# See docs/dashboard-plan.md, Phase 2.
+#
+# NOTE: a current Raspberry Pi OS image ALREADY sets dtoverlay=vc4-kms-v3d and
+# disable_overscan=1 in its stock config.txt. Check before appending — repeating
+# them here just duplicates keys. Only the settings below are actually missing.
+
+# flutter-pi uses GL via the V3D driver, NOT the legacy firmware GPU, so a large
+# gpu_mem split just steals RAM from the app. 64 stays right on the 1 GB Pi 3B —
+# the split feeds the legacy stack we aren't using, so raising it buys nothing.
+gpu_mem=64
+
+# Trim boot.
+disable_splash=1
+boot_delay=0
+
+# Display mode: deliberately NOT pinned.
+#
+# hdmi_group/hdmi_mode are LEGACY firmware settings. Under full KMS — which is
+# what vc4-kms-v3d gives us, and the stock image also sets
+# disable_fw_kms_setup=1 — the firmware no longer does mode setting, so those
+# keys are silently inert. Setting them here does nothing at all; a previous
+# version of this file claimed they forced 1080p60, and they did not.
+#
+# Instead KMS reads the panel's EDID and picks its preferred mode, which is the
+# behaviour we want for a board that moves between displays (a 12" Waveshare on
+# the bench, a wall TV in production). A hardcoded mode would black-screen
+# whichever panel didn't match.
+#
+# If a panel really does advertise a bad EDID, pin the mode on the KERNEL
+# command line (/boot/firmware/cmdline.txt), not here — append to the single
+# existing line:
+#   video=HDMI-A-1:1920x1080M@60
+# Inspect what KMS actually selected with:  modetest -c
+
+# Optional: disable on-board Bluetooth entirely to free UART + RAM.
+# dtoverlay=disable-bt

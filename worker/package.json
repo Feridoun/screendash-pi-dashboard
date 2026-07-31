@@ -1,0 +1,15 @@
+{
+  "name": "screendash-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker backend for the screendash ambient dashboard: yourteam.dev-gated Gmail intake (photos, notices, photo pins) and scheduled Google Calendar sync. No domain required.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

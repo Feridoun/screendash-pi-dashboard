@@ -1,0 +1,24 @@
+# Installed to /etc/sudoers.d/dashboard-admin (mode 0440).
+#
+# Lets the hidden admin panel (long-press top-left on the board) run the few
+# privileged commands it needs to recover a device we can't otherwise reach:
+# bring up Tailscale, and — last resort — stop the kiosk so a keyboard can log
+# in. Wi-Fi is NOT here: nmcli runs as `pi` via polkit and needs no sudo.
+#
+# Scoped to exactly these verbs. Tailscale needs two rules because the app calls
+# `tailscale up` (bring the tailnet up) and the installer script calls apt/dpkg
+# via `sh`; we allow the install one-liner as a single command so it isn't a
+# blanket shell grant.
+#
+# CAVEAT (same as dashboard-power.sudoers): stock Raspberry Pi OS ships
+# /etc/sudoers.d/010_pi-nopasswd with `pi ALL=(ALL) NOPASSWD: ALL`, which
+# already grants `pi` unrestricted root. While that file exists these rules add
+# nothing — their value is declaring the app's real privilege needs so the board
+# still works once you delete the blanket rule to lock things down.
+#
+# NOTE: the Tailscale installer (curl | sh) runs apt-get, which these narrow
+# rules do NOT cover. If you have removed 010_pi-nopasswd, install Tailscale
+# once by hand (or pre-bake it into the image); after that `tailscale up` is all
+# the panel needs and it is covered below.
+pi ALL=(root) NOPASSWD: /usr/bin/tailscale up *, /usr/sbin/tailscale up *
+pi ALL=(root) NOPASSWD: /bin/systemctl stop dashboard.service, /usr/bin/systemctl stop dashboard.service

@@ -1,0 +1,16 @@
+[Unit]
+Description=Check the backend for a new dashboard bundle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+# BACKEND_URL is written by deploy.sh so the updater polls the same origin the
+# app itself polls. Keep them in sync.
+EnvironmentFile=/etc/default/dashboard-update
+ExecStart=/home/pi/dashboard/update.sh
+# The updater sleeps through a settle window before accepting a new version.
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal

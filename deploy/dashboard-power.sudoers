@@ -1,0 +1,23 @@
+# Installed to /etc/sudoers.d/dashboard-power (mode 0440).
+#
+# Lets the dashboard UI trigger a clean shutdown from the config modal, so the
+# board can be unplugged without risking SD-card corruption from a write in
+# flight. There is no keyboard on a wall-mounted display and no one is going to
+# SSH in before switching it off at the socket.
+#
+# Kept in a separate file from dashboard-update.sudoers on purpose: that one
+# exists for the unattended updater, this one is reachable from the touchscreen,
+# and the two shouldn't widen each other.
+#
+# Scoped to poweroff alone -- deliberately NOT reboot, NOT halt, NOT blanket
+# NOPASSWD.
+#
+# CAVEAT, so nobody mistakes this for a security control it isn't: stock
+# Raspberry Pi OS installs /etc/sudoers.d/010_pi-nopasswd containing
+#     pi ALL=(ALL) NOPASSWD: ALL
+# which already grants `pi` unrestricted passwordless root. While that file is
+# present this rule grants nothing new, and the same is true of
+# dashboard-update.sudoers. Its value is that the app's required privilege is
+# declared explicitly, so the board still works if you later delete the blanket
+# rule -- which is the thing actually worth doing if you want this locked down.
+pi ALL=(root) NOPASSWD: /bin/systemctl poweroff, /usr/bin/systemctl poweroff
