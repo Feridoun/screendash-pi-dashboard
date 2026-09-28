@@ -21,6 +21,15 @@
 # desktop (a second X session on :1, reachable over the tailnet only). Omit it
 # and nothing VNC-related is installed. See docs/remote-desktop.md.
 #   VNC_PASSWORD='8charpw' ./deploy/deploy.sh provision
+#
+# REQUIRED during provision: DEVICE_TOKEN, the bearer token the on-device
+# updater sends when it downloads a bundle. The Worker refuses /bundles/*
+# without it, because the bundle is an artifact that can carry build-time
+# secrets. It must match the Worker secret of the same name:
+#   openssl rand -hex 32
+#   (cd worker && npx wrangler secret put DEVICE_TOKEN)
+#   DEVICE_TOKEN=<that value> ./deploy/deploy.sh provision
+# See docs/tailnet-security.md for the rollout order on a live board.
 set -euo pipefail
 
 MODE="${1:-publish}"
@@ -38,6 +47,16 @@ BACKEND_URL="${BACKEND_URL:?set BACKEND_URL to your backend origin}"
 # "aarch64-generic"). This is NOT ./build/flutter_assets -- that was the old
 # layout, and a release bundle has app.so, not kernel_blob.bin.
 BUNDLE_DIR="${BUNDLE_DIR:-./build/flutter-pi/pi3-64}"
+
+# --- Toolchain pins ---------------------------------------------------------
+# Both of these float by default, and both bit us on 2026-09-03: Flutter was
+# upgraded 3.44.4 -> 3.47.0 on a dev box, and the next `publish` died inside the
+# SDK with errors that pointed at flutterpi_tool's source, not at ours. Pin them
+# together and bump them together.
+FLUTTERPI_TOOL_VERSION="${FLUTTERPI_TOOL_VERSION:-0.12.0}"
+# The Flutter SDK version the pinned tool is known to build against. Set to an
+# empty string to skip the check if you have tested another pairing yourself.
+FLUTTER_PIN="${FLUTTER_PIN-3.44.4}"
 
 # How to push files to the backend origin. Override for your storage provider,
 # e.g.  PUBLISH_CMD='aws s3 cp {src} s3://dash-bucket/{dst} --acl public-read'
@@ -61,8 +80,33 @@ publish_file() {
 }
 
 build_bundle() {
+  # Fail fast and legibly on a mismatched SDK. Without this the build gets as far
+  # as compiling flutterpi_tool against the wrong flutter_tools and emits pages of
+  # "Method not found" from inside the pub cache, which reads like a broken tool
+  # rather than a version problem.
+  if [ -n "$FLUTTER_PIN" ]; then
+    local fv
+    fv="$(flutter --version 2>/dev/null | awk '/^Flutter [0-9]/{print $2; exit}')"
+    if [ -n "$fv" ] && [ "$fv" != "$FLUTTER_PIN" ]; then
+      echo "!! Flutter $fv is on PATH, but flutterpi_tool $FLUTTERPI_TOOL_VERSION needs $FLUTTER_PIN." >&2
+      echo "   flutterpi_tool builds against flutter_tools, a private package inside the" >&2
+      echo "   SDK, so a mismatch fails inside the SDK and not in your code." >&2
+      echo "   Use the pinned SDK:  PATH=\"\$HOME/flutter-$FLUTTER_PIN/bin:\$PATH\" $0 $MODE" >&2
+      echo "   (create it once with: git -C \$HOME/flutter worktree add \$HOME/flutter-$FLUTTER_PIN $FLUTTER_PIN)" >&2
+      echo "   Or set FLUTTER_PIN= to skip this check." >&2
+      exit 1
+    fi
+  fi
+
   echo ">> Ensuring flutterpi_tool is installed..."
-  dart pub global activate flutterpi_tool >/dev/null
+  # PINNED, deliberately. flutterpi_tool compiles against flutter_tools, an
+  # unstable private package inside the Flutter SDK, and declares an open-ended
+  # `flutter: ">=3.44.0"` for itself. So "latest" floats against whatever Flutter
+  # you happen to have installed, and the breakage surfaces only at deploy time:
+  # 0.12.0 does NOT build on Flutter 3.47, which removed the internals it uses
+  # (reporting/first_run.dart, Usage/DisabledUsage, DartBuildForNative). Bump
+  # this and FLUTTER_PIN together, having tested the pair. See docs/updating.md.
+  dart pub global activate flutterpi_tool "$FLUTTERPI_TOOL_VERSION" >/dev/null
 
   # `dart pub global activate` installs a bare shim on Linux/macOS but a .bat on
   # Windows, and Git Bash does not fall back to the .bat for a bare name. Resolve
@@ -80,14 +124,30 @@ build_bundle() {
 
   # Optionally bake a single-use Tailscale auth key into the bundle so the hidden
   # admin panel can bring a stranded board onto the tailnet without anyone typing
-  # a 60-char key on the touchscreen. SECURITY: this key ships inside the bundle
-  # on your storage origin -- use an ephemeral-OFF, reusable-OFF, short-expiry key
-  # and REVOKE it once the board has joined. Leave TAILSCALE_AUTHKEY unset to omit
-  # it (the panel then offers a paste field instead).
+  # a 60-char key on the touchscreen.
+  #
+  # SECURITY: this key ships inside the bundle on your storage origin. Bundles are
+  # no longer world-readable (the Worker gates /bundles/* behind DEVICE_TOKEN, see
+  # worker/src/serve.js), but a key in a build artifact is still a credential you
+  # do not control the lifetime of. Generate it TAGGED `tag:kiosk`, reusable-OFF,
+  # ephemeral-OFF, short expiry -- and REVOKE it once the board has joined.
+  #   tagged      the node lands under the restrictive policy in
+  #               deploy/tailscale-acl.json, which is what actually contains a
+  #               stolen board. An untagged node inherits the tailnet default.
+  #   ephemeral   OFF: the board is a permanent node, and an ephemeral one
+  #               deregisters itself the first time it is powered off overnight.
+  # Leave TAILSCALE_AUTHKEY unset to omit it (the panel offers a paste field).
+  # Full reasoning: docs/tailnet-security.md.
   local defines=(--dart-define=BACKEND_BASE_URL="$BACKEND_URL")
   if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     echo ">> Baking in a Tailscale auth key (remember to revoke it after use)."
     defines+=(--dart-define=TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY")
+  fi
+  # Which tag the panel asks for when it runs `tailscale up`. Defaults to
+  # tag:kiosk in AppConfig; override to '' to join untagged (not recommended --
+  # see deploy/tailscale-acl.json).
+  if [ -n "${TAILSCALE_TAG+x}" ]; then
+    defines+=(--dart-define=TAILSCALE_TAG="$TAILSCALE_TAG")
   fi
 
   # --cpu=pi3 selects a Cortex-A53-tuned engine. The board is a 3B; the tuned
@@ -247,9 +307,33 @@ provision)
   scp deploy/dashboard-admin.sudoers  "$PI_HOST:/tmp/dashboard-admin.sudoers"
   scp deploy/90-backlight.rules       "$PI_HOST:/tmp/90-backlight.rules"
 
+  # DEVICE_TOKEN authorises the updater's bundle downloads. Ship it out-of-band
+  # rather than on the ssh command line, where it would be visible in the Pi's
+  # process list to any local user for as long as the command runs (same
+  # reasoning as VNC_PASSWORD above).
+  if [ -z "${DEVICE_TOKEN:-}" ]; then
+    echo "!! DEVICE_TOKEN is unset. The Worker gates /bundles/* behind it, so this" >&2
+    echo "   board will never self-update -- every download will 404. Generate one" >&2
+    echo "   with 'openssl rand -hex 32', set it here AND as the Worker secret:" >&2
+    echo "   (cd worker && npx wrangler secret put DEVICE_TOKEN)" >&2
+    echo "   Continuing; the app itself will still install and run." >&2
+  fi
+  printf '%s' "${DEVICE_TOKEN:-}" | ssh "$PI_HOST" 'umask 077; cat > /tmp/.devtoken'
+
+  # The env file is written on its own rather than in the chain below because it
+  # now holds a credential: 0600 root:root, which systemd (PID 1, root) reads
+  # before dropping to User=pi. The old `tee` default of 0644 was fine for a file
+  # holding a URL and a path, and is not fine for this.
+  ssh "$PI_HOST" "BACKEND_URL='$BACKEND_URL' REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
+set -euo pipefail
+tok="$(cat /tmp/.devtoken)"; rm -f /tmp/.devtoken
+printf 'BACKEND_URL=%s\nROOT=%s\nDEVICE_TOKEN=%s\n' "$BACKEND_URL" "$REMOTE_DIR" "$tok" \
+  | sudo tee /etc/default/dashboard-update >/dev/null
+sudo chown root:root /etc/default/dashboard-update
+sudo chmod 0600 /etc/default/dashboard-update
+REMOTE
+
   ssh "$PI_HOST" "install -m 0755 /tmp/update.sh '$REMOTE_DIR/update.sh' && \
-    printf 'BACKEND_URL=%s\nROOT=%s\n' '$BACKEND_URL' '$REMOTE_DIR' \
-      | sudo tee /etc/default/dashboard-update >/dev/null && \
     sudo mv /tmp/dashboard.service /tmp/dashboard-update.service \
             /tmp/dashboard-update.timer /etc/systemd/system/ && \
     sudo install -m 0440 -o root -g root /tmp/dashboard-update.sudoers \
@@ -312,6 +396,10 @@ EOF
 
   echo ">> Published $VERSION. Devices pick it up within ~15 min (timer + jitter)."
   echo ">> Roll back by re-publishing a previous version.json."
+  if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
+    echo ">> REMINDER: $VERSION carries a Tailscale auth key. Revoke it in the admin"
+    echo "   console once the board has joined -- it stays in this bundle forever."
+  fi
   ;;
 
 *)

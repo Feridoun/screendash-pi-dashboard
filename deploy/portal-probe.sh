@@ -27,6 +27,12 @@
 # finding, not a crash.
 set -uo pipefail
 
+# Debian keeps ip/iw/iwgetid in sbin, and a non-login ssh shell drops sbin from
+# PATH while systemd keeps it. Without this the SAME script reports "ssid ?" when
+# you run it by hand over ssh and the real SSID when the soak unit runs it --
+# misleading in precisely the situation you reach for this tool.
+PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"
+
 IFACE="${IFACE:-}"
 BACKEND_URL="${BACKEND_URL:-}"
 LABEL="${LABEL:-snapshot}"
@@ -96,6 +102,20 @@ now()  { date -u +%Y-%m-%dT%H:%M:%SZ; }
 tcp_open() {
   local host="$1" port="$2" t="${3:-5}"
   timeout "$t" bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null
+}
+
+# Every probe must leave via the interface being appraised. Without this they
+# follow the default route, so on a multi-homed board -- a USB tether plugged in
+# to recover a box whose Wi-Fi sits behind a lapsed portal, say -- the entire
+# appraisal faithfully measures the tether and reports the Wi-Fi as healthy.
+# Set by main() from detect_iface; empty means "no opinion, use the default".
+IFACE_DEV=""
+pcurl() {
+  if [ -n "$IFACE_DEV" ]; then
+    curl --interface "$IFACE_DEV" "$@"
+  else
+    curl "$@"
+  fi
 }
 
 # --- interface discovery ----------------------------------------------------
@@ -189,7 +209,7 @@ probe_portal() {
     local body code redir out
     body="$(mktemp)"
     # No -L: the redirect IS the signal we are looking for.
-    out="$(curl -sS -m "$CURL_TIMEOUT" -o "$body" \
+    out="$(pcurl -sS -m "$CURL_TIMEOUT" -o "$body" \
              -w '%{http_code}|%{redirect_url}' "$url" 2>/dev/null)"
     code="${out%%|*}"; redir="${out#*|}"
 
@@ -258,7 +278,7 @@ probe_capport() {
 
   kv "api url" "$api"
   local resp
-  resp="$(curl -sS -m "$CURL_TIMEOUT" -H 'Accept: application/captive+json' "$api" 2>/dev/null)"
+  resp="$(pcurl -sS -m "$CURL_TIMEOUT" -H 'Accept: application/captive+json' "$api" 2>/dev/null)"
   kv "api response" "${resp:-<empty>}"
   jput capport "present"; jput capport_url "$api"; jput capport_response "${resp:-}"
 
@@ -277,7 +297,7 @@ probe_portal_page() {
   local page hdrs final code
   page="$OUT_DIR/$LABEL-portal.html"
   hdrs="$OUT_DIR/$LABEL-portal.headers"
-  final="$(curl -sSL -m 20 -o "$page" -D "$hdrs" -w '%{url_effective}' \
+  final="$(pcurl -sSL -m 20 -o "$page" -D "$hdrs" -w '%{url_effective}' \
            "$PORTAL_URL" 2>/dev/null)"
   code="$(awk '/^HTTP\//{c=$2} END{print c}' "$hdrs" 2>/dev/null)"
 
@@ -317,8 +337,13 @@ probe_portal_page() {
   local scripts; scripts="$(grep -ciE '<script' "$page" 2>/dev/null)"
   kv "script tags" "${scripts:-0}"
   if [ "${forms:-0}" -eq 0 ] && [ "${scripts:-0}" -gt 3 ]; then
-    flag "No <form> but heavy JS: the login is built client-side."
-    flag "   curl cannot drive this; you need a headless browser or an exemption."
+    flag "No <form> but heavy JS: the login UI is built client-side."
+    flag "   This does NOT by itself mean curl cannot drive it. An SPA portal"
+    flag "   usually still POSTs to ordinary endpoints; only the form markup is"
+    flag "   client-side. Capture the real requests before concluding:"
+    flag "     chromium --log-net-log=netlog.json <portal url>"
+    flag "   then click through, close chromium, and read the POST urls back."
+    flag "   Aruba cloud guest, for one, is three plain POSTs behind a Svelte UI."
     jput portal_js_driven yes
   fi
 
@@ -372,7 +397,7 @@ probe_egress() {
   # The one that decides whether the dashboard works at all.
   if [ -n "$BACKEND_URL" ]; then
     local t code
-    t="$(curl -sS -m 20 -o /dev/null -w '%{http_code}|%{time_total}|%{speed_download}' \
+    t="$(pcurl -sS -m 20 -o /dev/null -w '%{http_code}|%{time_total}|%{speed_download}' \
          "$BACKEND_URL/manifest.json" 2>/dev/null)"
     code="${t%%|*}"
     kv "backend manifest.json" "HTTP ${code:-000} in $(printf '%s' "$t" | cut -d'|' -f2)s"
@@ -457,7 +482,7 @@ PY
 
   # Drift between local time and a public HTTP Date header, when NTP is blocked.
   local hdr_date
-  hdr_date="$(curl -sSI -m "$CURL_TIMEOUT" https://www.cloudflare.com/ 2>/dev/null \
+  hdr_date="$(pcurl -sSI -m "$CURL_TIMEOUT" https://www.cloudflare.com/ 2>/dev/null \
               | sed -n 's/^[Dd]ate: //p' | tr -d '\r')"
   [ -n "$hdr_date" ] && kv "remote http date" "$hdr_date"
 }
@@ -466,7 +491,7 @@ PY
 # Modes
 # ---------------------------------------------------------------------------
 mode_snapshot() {
-  local dev; dev="$(detect_iface)"
+  local dev; dev="$(detect_iface)"; IFACE_DEV="$dev"
   printf '%s%s captive-portal appraisal -- %s (%s) %s\n' \
     "$BOLD" "$LABEL" "$(now)" "$(uname -n)" "$RST"
 
@@ -497,7 +522,7 @@ mode_snapshot() {
 }
 
 mode_soak() {
-  local dev; dev="$(detect_iface)"
+  local dev; dev="$(detect_iface)"; IFACE_DEV="$dev"
   [ -f "$SOAK_LOG" ] || printf 'timestamp\tstate\tportal_url\trx_bytes\ttx_bytes\n' > "$SOAK_LOG"
   echo "soaking every ${SOAK_INTERVAL}s into $SOAK_LOG (Ctrl-C or systemd-stop to end)"
   while true; do

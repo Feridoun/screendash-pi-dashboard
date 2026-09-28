@@ -7,10 +7,10 @@ Wayland, no kiosk-mode Chromium. Flutter renders straight to DRM/KMS via
 
 ```
 ┌──────────────┬──────────────────┬─────────────┐
-│              │ CALENDAR         │ DIRECTORY   │
-│  PHOTO       │  14-day grid     │  grouped    │
-│  STAGE       │                  │  contacts   │
-│  (dominant)  │ AGENDA           │  MESSAGES   │
+│              │ CLOCK + WEATHER  │ DIRECTORY   │
+│  PHOTO       │ CALENDAR         │  grouped    │
+│  STAGE       │  14-day grid     ├─────────────┤
+│  (dominant)  │ MESSAGES         │ ROTA        │
 ├──────────────┴──────────────────┴─────────────┤
 │                  MOTD banner                   │
 └────────────────────────────────────────────────┘
@@ -41,6 +41,8 @@ Backend (holds all secrets)  →  object storage  →  device polls over HTTPS
   /motd.json        banner text + optional accent colour
   /messages.json    a capped chat feed
   /directory.json   grouped phone/email directory
+  /rota.json        who is in each day for the next fortnight
+  /weather.json     today + tomorrow, already flattened to whole degrees
 ```
 
 This is what makes the rest tractable. The Pi can sit on a network you cannot
@@ -49,9 +51,10 @@ because nothing ever has to *reach* it.
 
 **2. Email is the CMS.**
 There is no admin UI, no login, no training. A scheduled job polls one mailbox
-every 5 minutes and routes on the subject line: attachments become photos,
-`notice:` sets the banner, `pinphoto:` holds one image on screen, `delete:`
-(as a reply) removes what that email added. Handled mail gets a label, so the
+every 5 minutes. The subject line is the command and the body is what it acts
+on: attachments become photos, `notice` sets the banner, `message` posts to
+the feed, `pinphoto` holds one image on screen, `delete` (as a reply) removes
+what that email added. Handled mail gets a label, so the
 inbox itself is the audit log. Senders are gated by email domain.
 
 **3. Even software updates are a poll.**
@@ -66,10 +69,12 @@ into is one command, from anywhere.
 | | |
 |---|---|
 | **Photo stage** | Rotating slideshow with a hard memory ceiling. Tap to pin. |
-| **Calendar** | Rolling 14-day grid + agenda, synced from Google Calendar. |
+| **Clock + weather** | Time, weekday and a two-day outlook from [Open-Meteo](https://open-meteo.com/) — no account, no key. Shows nothing rather than a stale forecast. |
+| **Calendar** | Rolling 14-day grid, synced from Google Calendar. |
 | **Directory** | Grouped contacts, built from a Google Sheet. Tap for full screen. |
+| **Rota** | Who is in today and the next two working days, from a Google Sheet plus a leave Form. See below. |
 | **Banner** | Message of the day; long text scrolls; tap to step back through recent notices. |
-| **Messages** | A short chat feed written by `message:` emails. |
+| **Messages** | A short chat feed written by `message` emails. |
 | **Celebrations** | A brief animated flourish when new photos or a new notice land. |
 | **Dimming** | Two-layer, time-based: a software scrim plus real panel power-off — for burn-in, and for not glowing at an empty office all night. |
 | **Admin panel** | Hidden recovery console — long-press the top-left corner. |
@@ -121,11 +126,17 @@ While photos cycle, open Flutter DevTools and watch
    ```bash
    PI_HOST=pi@screendash.local \
    BACKEND_URL=https://screendash.<your-subdomain>.workers.dev \
+   DEVICE_TOKEN=$(openssl rand -hex 32) \
      ./deploy/deploy.sh provision
    ```
    This installs the bundle, systemd units, udev rule, update timer, and the GL
    runtime libraries Pi OS Lite doesn't ship. It also disables `getty@tty1`,
    which otherwise silently prevents the app from ever starting.
+
+   `DEVICE_TOKEN` is the bearer token the updater sends to download a bundle.
+   The Worker serves `/bundles/*` to nobody else, because a bundle can carry
+   build-time secrets. Set the **same value** as a Worker secret
+   (`npx wrangler secret put DEVICE_TOKEN`) or the board never self-updates.
 3. **Every update after that** needs no access to the device:
    ```bash
    VERSION=1.0.1 BACKEND_URL=... PUBLISH_CMD='...' ./deploy/deploy.sh publish
@@ -137,24 +148,47 @@ easiest way to break that silently.
 
 ## How staff drive it
 
-One mailbox, routed by subject line:
+One mailbox. The **subject line is the command** — `notice`, `message`,
+`pinphoto`, `delete` — and the **body is what that command acts on**:
 
 | To do this | Send an email that… |
 |---|---|
-| Add photos | has image attachments, subject **not** starting with `notice:`, `pinphoto:` or `delete:` |
-| Update the banner | has subject `notice: Coffee machine is fixed` |
+| Add photos | has image attachments, and any subject that isn't a command word |
+| Update the banner | has subject `notice`, banner text in the body |
 | Set a banner colour | includes `#accent=#E8A33D` on a line in the body |
-| Clear the banner | has subject exactly `notice:`, empty body |
-| Post to the message feed | has subject `message: ...` |
-| Hold a photo on screen | has subject `pinphoto:` with the photo attached |
-| Resume rotation | has subject exactly `pinphoto:` with no attachment |
-| Remove photos | is a **reply** to the email that added them, subject `delete:` |
+| Clear the banner | has subject `notice`, empty body |
+| Post to the message feed | has subject `message`, the message in the body |
+| Hold a photo on screen | has subject `pinphoto` with the photo attached |
+| Pin a photo already up | has subject `pinphoto`, part of its filename in the body |
+| Resume rotation | has subject `pinphoto`, no attachment, empty body |
+| Remove photos | is a **reply** to the email that added them, subject `delete` |
+| Remove one photo | has subject `delete`, part of its filename in the body |
+
+A trailing colon is optional, and the older one-line form — `notice: Coffee
+machine is fixed` — still works: text after the colon wins over the body, so no
+signature block can overwrite a subject somebody typed deliberately.
 
 A one-page version for non-technical staff, with none of the above plumbing, is
 in [docs/user-guide.md](docs/user-guide.md) — hand it out as-is.
 
 Deleted photos move to a `removed/` prefix rather than being destroyed, because
-a `delete:` reply on the wrong thread is a matter of when, not if.
+a `delete` reply on the wrong thread is a matter of when, not if.
+
+### The rota
+
+The rota card under the directory shows who is in today and the next two working
+days, from a Google Sheet with two tabs. `Team` holds each person's usual weekdays
+and hours, edited when the rotation changes; a weekday cell may hold a word
+instead of hours (`WFH`, `Clinic`, `Study`) for a regular day off the ward.
+`Leave` holds the exceptions — annual leave, study leave, sick, a meeting window,
+working from home — one row each, usually submitted from a phone through a
+Google Form whose name list the Worker keeps in step with the `Team` tab. The
+Worker resolves the two into a fortnight of per-person statuses (`in`,
+`partial`, `away`, `off`) and publishes that, so the board does no rota
+arithmetic. A `Notify_list` tab names who gets an email for each booking.
+[worker/create-rota-sheet.mjs](worker/create-rota-sheet.mjs) builds the Sheet
+and Form for you; setup is in
+[docs/cloudflare-setup.md](docs/cloudflare-setup.md#10b-set-up-the-rota-sheet-and-form).
 
 ## The traps, written down
 
@@ -174,6 +208,11 @@ time to find:
 - [docs/remote-desktop.md](docs/remote-desktop.md) — an optional browser-based
   admin desktop over Guacamole + Tailscale, and why you still **cannot see the
   kiosk itself** (the limitation is in the hardware).
+- [docs/tailnet-security.md](docs/tailnet-security.md) — a board on a public
+  wall is a board someone can take, and physical access to a Pi is root.
+  Tailscale's default policy lets every node reach every other one;
+  [deploy/tailscale-acl.json](deploy/tailscale-acl.json) makes the kiosk a
+  destination only, and the doc has the rest of the threat model.
 
 Two more worth knowing before you start:
 
@@ -182,8 +221,13 @@ Two more worth knowing before you start:
   nothing like a clock problem. Confirm outbound NTP is allowed, or add a ~£5
   DS3231.
 - **Tailscale auth keys baked in with `--dart-define` end up inside the
-  published bundle.** Use ephemeral-off, reusable-off, short-expiry keys, and
-  revoke them once the board has joined.
+  published bundle** — which is why bundle downloads are gated. Use tagged
+  (`tag:kiosk`), ephemeral-off, reusable-off, short-expiry keys, and revoke them
+  once the board has joined.
+- **`/admin/*` needs a token.** The manual triggers (poll Gmail, rebuild the
+  manifest, sync a feed) want `Authorization: Bearer $ADMIN_TOKEN`, set as a
+  Worker secret. The board's own refresh button may run the three syncs
+  anonymously, at most once a minute each.
 
 ## Layout
 
@@ -203,7 +247,14 @@ worker/                       Cloudflare backend (see worker/README.md)
   src/photos.js               Resize, write to R2, rebuild manifest
   src/calendar.js             Cron: Google Calendar → events.json
   src/directory.js            Cron: Google Sheet → directory.json
-  src/serve.js                Serves the artifacts, with ETags
+  src/rota.js                 Cron: rota Sheet (pattern + leave) → rota.json
+  src/rota_alerts.js          Emails the notify list about new bookings
+  src/forms.js                Keeps the leave Form's names in step with the Sheet
+  src/sheets.js               Shared Sheets fetch + header-name column matching
+  src/weather.js              Cron: Open-Meteo → weather.json (no key)
+  src/admin.js                Token gate for the manual /admin/* triggers
+  src/serve.js                Serves the artifacts, with ETags; gates /bundles/*
+  create-rota-sheet.mjs       One-off: build the rota Sheet and its leave Form
 
 deploy/                       deploy.sh, on-device update.sh, systemd units,
                               narrow sudoers grants, captive-portal probe
@@ -216,7 +267,7 @@ Everything tunable is in one file:
 
 ```bash
 flutter analyze   # clean
-flutter test      # model parsing, grid maths, theme, dim-controller sanity
+flutter test      # model parsing, grid maths, rota, weather, widgets
 ```
 
 ## Adapting it

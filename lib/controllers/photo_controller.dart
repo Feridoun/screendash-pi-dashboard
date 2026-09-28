@@ -22,7 +22,7 @@ import 'polling_controller.dart';
 /// Pinning holds one photo on screen indefinitely. It has two sources that must
 /// coexist without fighting each other:
 ///   * the backend, via `"pinned": true` on a manifest entry (set by a
-///     `pinphoto:` email), and
+///     `pinphoto` email), and
 ///   * a click on the photo itself, which is device-local.
 ///
 /// The rule: a *change* in what the manifest says wins, because it's a fresh

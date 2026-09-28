@@ -8,8 +8,8 @@ void main() {
   group('splitNmcliLine', () {
     test('plain three-field line', () {
       expect(
-        SystemOps.splitNmcliLine('LPS-Guest:72:WPA2'),
-        ['LPS-Guest', '72', 'WPA2'],
+        SystemOps.splitNmcliLine('Office-Guest:72:WPA2'),
+        ['Office-Guest', '72', 'WPA2'],
       );
     });
 

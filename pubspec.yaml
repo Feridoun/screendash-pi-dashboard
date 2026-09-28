@@ -73,22 +73,45 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
+  # Body text is deliberately left to the system font -- the Pi's DejaVu reads
+  # well at wall distance and costs us nothing to ship. Emoji are the exception:
+  # Pi OS Lite carries no font with any emoji coverage, so a notice containing
+  # one rendered as a tofu box on the wall while looking fine on a dev machine.
+  # Bundling it rather than apt-installing it on the Pi keeps glyph coverage
+  # version-swapping atomically with the app, the same way the flutter-pi
+  # binaries in the bundle do -- a re-imaged Pi is never one missing package
+  # away from boxes on the notice board.
   #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  # ~10MB, which is the CBDT bitmap-strike build. It is memory-mapped rather
+  # than read resident, so the Pi 3B pays page cache for the handful of glyphs
+  # actually drawn, not for the whole file. See DashTheme.build for the fallback
+  # wiring -- the family name here must match the one it references.
+  fonts:
+    # Roboto is not vanity -- it is what Flutter's own Typography already names
+    # as the primary family on Linux, and it has never existed on Pi OS Lite.
+    # For a long time that was invisible: nothing matched the name, so Skia's
+    # system fallback quietly drew DejaVu instead. It stopped being invisible
+    # the moment a second family was added below, because then the miss had
+    # somewhere else to land. Shipping the font the theme actually asks for is
+    # what makes the wall's typography deterministic rather than a side effect
+    # of which fonts the OS image happens to carry.
+    #
+    # Copied from the Flutter SDK's own material_fonts artifacts (Apache 2.0),
+    # so these are exactly the weights Typography was designed against.
+    # The UI uses w500/w600/w700/w800; 600 and 800 have no static cut here and
+    # resolve upward to Bold and Black, which is what Roboto does on Android.
+    - family: Roboto
+      fonts:
+        - asset: fonts/Roboto-Regular.ttf
+        - asset: fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: fonts/Roboto-Black.ttf
+          weight: 900
+    # Strictly a fallback, and it MUST stay behind a family with Latin coverage:
+    # this font has essentially none, so if it is ever the first name that
+    # resolves it becomes the face for all text and the dashboard goes blank.
+    - family: NotoColorEmoji
+      fonts:
+        - asset: fonts/NotoColorEmoji.ttf

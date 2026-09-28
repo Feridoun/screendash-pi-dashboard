@@ -79,7 +79,15 @@ class BackendClient {
     final etag = resp.headers['etag'];
     if (etag != null) _etags[key] = etag;
 
-    final decoded = jsonDecode(resp.body);
+    // utf8.decode(bodyBytes), NOT resp.body. `body` picks its codec from the
+    // response's content-type charset, and package:http's fallback when there
+    // is none is LATIN-1. The worker labels these `application/json` with no
+    // charset, so the only reason non-ASCII text survives today is that http
+    // >=1.4 carves out application/json and uses utf8 for it -- and our
+    // constraint is ^1.2.2, which still admits versions without that carve-out.
+    // JSON is UTF-8 by spec (RFC 8259 s8.1), so decoding the bytes directly is
+    // correct regardless of the http version or what the origin labels them.
+    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Expected a JSON object at top level');
     }
@@ -92,6 +100,12 @@ class BackendClient {
   /// The only write the device ever makes. Given a longer timeout than a plain
   /// GET because the backend does real work here — a Sheets or Calendar API
   /// round-trip — before it answers. Throws on failure.
+  ///
+  /// Sent without a credential, so the backend runs each trigger for anonymous
+  /// callers at most once a minute and answers 429 in between
+  /// (worker/src/admin.js). That throws like any other failure, and every
+  /// caller pulls the artifact afterwards regardless, so a second tap inside
+  /// the minute still shows whatever the first one produced.
   Future<void> post(Uri uri) async {
     final resp = await _http.post(uri).timeout(const Duration(seconds: 30));
     if (resp.statusCode != 200) {

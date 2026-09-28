@@ -31,6 +31,45 @@ async function api(token, path, init = {}) {
   return resp.json();
 }
 
+/** UTF-8 text as base64 (atob/btoa only speak Latin-1). */
+function base64Utf8(text) {
+  let binary = '';
+  for (const b of new TextEncoder().encode(text)) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+/**
+ * Send a plain-text mail from the dashboard's own mailbox. `to`, `cc` and
+ * `replyTo` are arrays of addresses. gmail.modify covers sending, so this
+ * needs no scope beyond what intake already has.
+ *
+ * Set `replyTo` to people: a reply to the mailbox itself would be picked up
+ * by the poller like any other mail.
+ */
+export async function sendMail(env, { to, cc = [], replyTo = [], subject, text }) {
+  const token = await accessToken(env);
+  const headers = [
+    `To: ${to.join(', ')}`,
+    ...(cc.length ? [`Cc: ${cc.join(', ')}`] : []),
+    ...(replyTo.length ? [`Reply-To: ${replyTo.join(', ')}`] : []),
+    `Subject: =?UTF-8?B?${base64Utf8(subject)}?=`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+  ];
+  const message = `${headers.join('\r\n')}\r\n\r\n${base64Utf8(text).replace(/.{76}/g, '$&\r\n')}`;
+  const raw = base64Utf8(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const sent = await api(token, '/messages/send', { method: 'POST', body: JSON.stringify({ raw }) });
+  // The poller reads Sent too (a reply from this mailbox is how a photo gets
+  // deleted), so mark our own mail handled before it gets there.
+  const labelId = await ensureLabel(token, env.GMAIL_PROCESSED_LABEL || 'screendash-done');
+  await api(token, `/messages/${sent.id}/modify`, {
+    method: 'POST',
+    body: JSON.stringify({ addLabelIds: [labelId] }),
+  });
+  return sent;
+}
+
 /** Find the processed-label id, creating the label if it doesn't exist yet. */
 async function ensureLabel(token, name) {
   const { labels = [] } = await api(token, '/labels');
@@ -79,6 +118,35 @@ function referencedIds(headers) {
 }
 
 /**
+ * The HTML part, reduced to something the intake rules can read.
+ *
+ * The body is where a notice or a message now lives, so a mail with no
+ * text/plain part at all — some clients send HTML only — would otherwise arrive
+ * empty and silently clear the banner. Deliberately blunt: drop the parts that
+ * never hold prose, turn the block-level tags back into line breaks, and leave
+ * the signature trimming to cleanText.
+ */
+export function htmlToText(html = '') {
+  return html
+    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&#x27;|&apos;/gi, "'")
+    // Last, so an escaped entity in the text doesn't decode into a live one.
+    .replace(/&amp;/gi, '&')
+    .split('\n')
+    .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Walk the MIME tree, collecting the plain-text body and any attachment stubs.
  * Attachment bytes are fetched separately (Gmail only returns an attachmentId
  * inline once the payload exceeds a small size).
@@ -87,7 +155,7 @@ function referencedIds(headers) {
  * whether the part is embedded in the body, and how big it is. Both come out of
  * the part metadata, so the decision costs no download — see [isDecorativeImage].
  */
-function walkParts(payload, out = { text: '', attachments: [] }) {
+function walkParts(payload, out = { text: '', html: '', attachments: [] }) {
   if (!payload) return out;
 
   const { mimeType = '', filename = '', body = {}, parts, headers = [] } = payload;
@@ -107,6 +175,9 @@ function walkParts(payload, out = { text: '', attachments: [] }) {
     });
   } else if (mimeType === 'text/plain' && body.data) {
     out.text += new TextDecoder().decode(decodeBase64Url(body.data));
+  } else if (mimeType === 'text/html' && body.data) {
+    // Only used when there is no text/plain part at all — see [htmlToText].
+    out.html += new TextDecoder().decode(decodeBase64Url(body.data));
   }
 
   for (const part of parts || []) walkParts(part, out);
@@ -158,7 +229,8 @@ export async function pollGmail(env) {
       const from = headerValue(headers, 'From');
       const subject = headerValue(headers, 'Subject');
 
-      const { text, attachments } = walkParts(msg.payload);
+      const { text, html, attachments } = walkParts(msg.payload);
+      const body = text.trim() ? text : htmlToText(html);
 
       // Pull attachment bytes only for images — no point downloading a PDF —
       // and only for images that are actually photos. Both filters run on the
@@ -183,7 +255,7 @@ export async function pollGmail(env) {
       const result = await applyMessage(env, {
         from,
         subject,
-        body: text,
+        body,
         attachments: withBytes,
         // Mail identity, recorded against stored photos so a `delete:` reply can
         // find them again. Gmail hands us threadId on the message itself.

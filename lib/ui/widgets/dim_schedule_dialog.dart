@@ -172,7 +172,8 @@ class _DimScheduleDialogState extends State<_DimScheduleDialog> {
             const SizedBox(height: 8),
             Text(
               _valid
-                  ? 'Tap the screen while it is off to wake it briefly.'
+                  ? 'Move the mouse or tap the screen while it is off to wake '
+                      'it briefly.'
                   : 'Hours must run forward: bright → dim → off.',
               style: TextStyle(
                 color: _valid ? DashTheme.inkFaint : DashTheme.offline,

@@ -3,7 +3,8 @@
  *
  * Two entry points:
  *   scheduled()  cron → poll Gmail for photos/notices/pins, and sync Google Calendar
- *   fetch()      HTTP → serve the artifacts the Pi polls
+ *   fetch()      HTTP → serve the artifacts the Pi polls, and the /admin/*
+ *                triggers (who may pull which: see admin.js)
  *
  * There is deliberately no inbound-email handler: mail is *pulled* from Gmail
  * rather than pushed by Cloudflare Email Routing, which means this whole backend
@@ -14,19 +15,50 @@
 import { pollGmail } from './gmail.js';
 import { syncCalendar } from './calendar.js';
 import { syncDirectory } from './directory.js';
+import { syncRota } from './rota.js';
+import { syncWeather } from './weather.js';
 import { serveArtifact } from './serve.js';
 import { pruneAndRebuildManifest } from './photos.js';
+import { refuseAdmin } from './admin.js';
+
+/**
+ * The manual triggers under /admin/: force a job now rather than waiting for
+ * its cron. `board: true` marks the three the device's refresh button pulls,
+ * which admin.js lets anonymous callers run once a minute; the rest need the
+ * ADMIN_TOKEN bearer secret. Each `run` returns the fields that go beside
+ * `ok: true` in the response.
+ */
+const TRIGGERS = {
+  'sync-calendar': { board: true, run: async (env) => ({ events: await syncCalendar(env) }) },
+  'sync-directory': { board: true, run: (env) => syncDirectory(env) },
+  'sync-rota': { board: true, run: (env) => syncRota(env) },
+  'sync-weather': { run: async (env) => ({ days: await syncWeather(env) }) },
+  'poll-gmail': { run: async (env) => ({ handled: await pollGmail(env) }) },
+  // Republish manifest.json from whatever is in R2 right now. Needed after
+  // editing the bucket by hand — the device only ever reads the manifest, so
+  // an object deleted underneath it stays on the wall until this runs.
+  // Idempotent, and destroys nothing: the MAX_PHOTOS prune it runs archives
+  // to `removed/` rather than deleting.
+  'rebuild-manifest': {
+    run: async (env) => {
+      const m = await pruneAndRebuildManifest(env);
+      return { hash: m.hash, photos: m.photos.length };
+    },
+  },
+};
 
 export default {
   /**
    * Cron. Two schedules are registered in wrangler.toml:
    *   every 5 min  → Gmail intake (photos + notices + pins)
-   *   every 15 min → Calendar sync + directory sync
+   *   every 15 min → Calendar sync + directory sync + rota sync
    * Anything unrecognised runs both, so a schedule change can't silently
    * disable intake.
    *
-   * The directory rides the 15-minute tick rather than owning a schedule: it is
-   * one cheap API call, and the sheet changes a few times a year.
+   * The directory, the rota and the weather ride the 15-minute tick rather
+   * than owning a schedule: each is one or two cheap API calls, and none
+   * changes fast — the directory a few times a year, the rota when someone
+   * books leave, the forecast hourly at best.
    */
   async scheduled(event, env, ctx) {
     const cron = event.cron || '';
@@ -55,6 +87,19 @@ export default {
           } catch (err) {
             console.log(`directory sync failed: ${err}`);
           }
+          // And a broken rota tab must not cost us the directory, or vice versa.
+          try {
+            await syncRota(env);
+          } catch (err) {
+            console.log(`rota sync failed: ${err}`);
+          }
+          // Likewise the weather — it is the least important thing on the wall
+          // and must not take the other two down with it.
+          try {
+            await syncWeather(env);
+          } catch (err) {
+            console.log(`weather sync failed: ${err}`);
+          }
         }
       })(),
     );
@@ -68,44 +113,17 @@ export default {
       return new Response('ok', { headers: { 'content-type': 'text/plain' } });
     }
 
-    if (request.method === 'POST') {
-      // Handy while setting things up: force either job immediately.
-      if (url.pathname === '/admin/sync-calendar') {
-        try {
-          const n = await syncCalendar(env);
-          return json({ ok: true, events: n });
-        } catch (err) {
-          return json({ ok: false, error: String(err) }, 500);
-        }
-      }
-      if (url.pathname === '/admin/sync-directory') {
-        try {
-          return json({ ok: true, ...(await syncDirectory(env)) });
-        } catch (err) {
-          return json({ ok: false, error: String(err) }, 500);
-        }
-      }
-      if (url.pathname === '/admin/poll-gmail') {
-        try {
-          const n = await pollGmail(env);
-          return json({ ok: true, handled: n });
-        } catch (err) {
-          return json({ ok: false, error: String(err) }, 500);
-        }
-      }
-      // Republish manifest.json from whatever is in R2 right now. Needed after
-      // editing the bucket by hand — the device only ever reads the manifest,
-      // so an object deleted underneath it stays on the wall until this runs.
-      // Idempotent and non-destructive (bar the MAX_PHOTOS prune it already
-      // does on every intake), which is why it sits with the other open
-      // /admin/* triggers rather than behind a credential.
-      if (url.pathname === '/admin/rebuild-manifest') {
-        try {
-          const m = await pruneAndRebuildManifest(env);
-          return json({ ok: true, hash: m.hash, photos: m.photos.length });
-        } catch (err) {
-          return json({ ok: false, error: String(err) }, 500);
-        }
+    if (request.method === 'POST' && url.pathname.startsWith('/admin/')) {
+      const name = url.pathname.slice('/admin/'.length);
+      // hasOwn, so `/admin/constructor` is a 404 rather than Object's.
+      const trigger = Object.hasOwn(TRIGGERS, name) ? TRIGGERS[name] : null;
+      if (!trigger) return new Response('Not found', { status: 404 });
+      const refusal = await refuseAdmin(request, env, name, { board: trigger.board });
+      if (refusal) return refusal;
+      try {
+        return json({ ok: true, ...(await trigger.run(env)) });
+      } catch (err) {
+        return json({ ok: false, error: String(err) }, 500);
       }
     }
 

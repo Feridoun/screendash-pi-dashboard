@@ -5,22 +5,36 @@ import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
 import '../../controllers/directory_controller.dart';
+import '../../controllers/rota_controller.dart';
 import '../../models/directory_entry.dart';
 import '../directory_screen.dart';
 import '../theme.dart';
 import 'directory_list.dart';
 import 'kiosk_scroll_behavior.dart';
+import 'rota_card.dart';
 import 'section_header.dart';
 
-/// The right-hand dashboard column: a compact grouped contact list that scrolls
-/// in place, so a long staff list can be read without leaving the dashboard.
-/// Tapping anywhere still opens the roomier full-screen directory.
+/// The right-hand dashboard column, in two equal halves.
+///
+/// Above, the directory: a compact grouped contact list that scrolls in place,
+/// so a long staff list can be read without leaving the dashboard, with a tap
+/// anywhere still opening the roomier full-screen version. Below, the doctors
+/// rota: who is in over the next few days, with their hours.
 class DirectoryColumn extends StatelessWidget {
   const DirectoryColumn({super.key});
+
+  /// The status overlay's gear and refresh icons float in the bottom-right
+  /// corner of the column area, which is this column's bottom-right corner.
+  /// The rota keeps that strip clear, so the last doctor's hours never end up
+  /// under a gear. The icons are 48 px tall and sit 24 px up, on this
+  /// column's 24 px of bottom padding.
+  static const double statusOverlayClearance = 48;
 
   @override
   Widget build(BuildContext context) {
     final dir = context.watch<DirectoryController>();
+    final today = DateTime.now();
+    final rotaDays = context.watch<RotaController>().shownDays(now: today);
 
     return Container(
       color: DashTheme.surface,
@@ -28,16 +42,48 @@ class DirectoryColumn extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(title: 'DIRECTORY'),
-          const SizedBox(height: 14),
+          // --- Directory ---
           Expanded(
-            child: dir.hasEntries
-                ? _TappableList(groups: dir.groups)
-                : Text(
-                    'No directory entries',
-                    style:
-                        TextStyle(color: DashTheme.inkFaint, fontSize: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(title: 'DIRECTORY'),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: dir.hasEntries
+                      ? _TappableList(groups: dir.groups)
+                      : Text(
+                          'No directory entries',
+                          style: TextStyle(
+                              color: DashTheme.inkFaint, fontSize: 18),
+                        ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Divider(height: 1, thickness: 1, color: DashTheme.line),
+          const SizedBox(height: 18),
+
+          // --- Doctors rota ---
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Each day column carries its own date, so the heading needs
+                // no trailing one — and no "· MONDAY" when the card is looking
+                // past a weekend, since the columns say so.
+                const SectionHeader(title: 'DOCTORS ROTA'),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.only(bottom: statusOverlayClearance),
+                    child: RotaCard(days: rotaDays, today: today),
                   ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -146,7 +192,9 @@ class _TappableListState extends State<_TappableList> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: _buildScroller()),
-            // Affordance that there's more behind a click.
+            const SizedBox(height: 6),
+            // The lower banner: an affordance that the list scrolls, and that
+            // there's a roomier version behind a click.
             Row(
               children: [
                 Icon(Icons.open_in_full,
@@ -154,7 +202,7 @@ class _TappableListState extends State<_TappableList> {
                 const SizedBox(width: 7),
                 Flexible(
                   child: Text(
-                    'Scroll, or click for full directory',
+                    'Scroll, or click to expand',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:

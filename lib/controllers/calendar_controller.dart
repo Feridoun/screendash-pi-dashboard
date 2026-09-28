@@ -6,7 +6,7 @@ import '../models/calendar_grid.dart';
 import '../services/backend_client.dart';
 import 'polling_controller.dart';
 
-/// Polls events.json and exposes both the 14-day grid and the agenda.
+/// Polls events.json and exposes the 14-day grid.
 class CalendarController extends PollingController {
   final AppConfig config;
   final BackendClient client;
@@ -20,17 +20,6 @@ class CalendarController extends PollingController {
 
   /// Events bucketed by calendar day (recomputed on each feed update).
   Map<DateTime, List<CalendarEvent>> _byDay = const {};
-
-  /// Upcoming events, filtered to those not already well past, soonest first.
-  /// Drives the agenda list beneath the grid.
-  List<CalendarEvent> get upcoming {
-    final now = DateTime.now();
-    final list = _feed.events
-        .where((e) => e.start.isAfter(now.subtract(const Duration(minutes: 5))))
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-    return list;
-  }
 
   /// The rolling 14-day grid anchored at today, with per-day event counts.
   CalendarGrid get grid => CalendarGrid.build(

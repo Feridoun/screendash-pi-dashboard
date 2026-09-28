@@ -289,6 +289,11 @@ class _TailscaleCard extends StatefulWidget {
 
 class _TailscaleCardState extends State<_TailscaleCard> {
   final _keyField = TextEditingController(text: AppConfig.tailscaleAuthKey);
+  // Obscured by default -- the board hangs in a public corridor. But this is a
+  // RECOVERY panel on a device with no clipboard, so a key you cannot read back
+  // is a key you cannot correct: a single mistyped character returns nothing but
+  // "key does not exist". Reveal is opt-in and momentary.
+  bool _showKey = false;
   bool _busy = false;
   ActionResult? _result;
 
@@ -337,11 +342,19 @@ class _TailscaleCardState extends State<_TailscaleCard> {
           const SizedBox(height: 16),
           TextField(
             controller: _keyField,
-            obscureText: true,
+            obscureText: !_showKey,
             style: TextStyle(color: DashTheme.ink, fontSize: 15),
             decoration: InputDecoration(
               labelText: baked ? 'Auth key (baked in at build)' : 'Paste auth key (tskey-auth-…)',
               labelStyle: TextStyle(color: DashTheme.inkFaint),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _showKey ? Icons.visibility_off : Icons.visibility,
+                  color: DashTheme.inkFaint,
+                ),
+                tooltip: _showKey ? 'Hide key' : 'Show key',
+                onPressed: () => setState(() => _showKey = !_showKey),
+              ),
               filled: true,
               fillColor: DashTheme.surfaceAlt,
               enabledBorder: OutlineInputBorder(
@@ -399,6 +412,7 @@ class _WifiCardState extends State<_WifiCard> {
   bool _scanning = false;
   WifiNetwork? _selected;
   final _pwField = TextEditingController();
+  bool _showPw = false;
   bool _connecting = false;
   ActionResult? _result;
 
@@ -479,11 +493,19 @@ class _WifiCardState extends State<_WifiCard> {
             if (!_selected!.open)
               TextField(
                 controller: _pwField,
-                obscureText: true,
+                obscureText: !_showPw,
                 style: TextStyle(color: DashTheme.ink),
                 decoration: InputDecoration(
                   labelText: 'Password for “${_selected!.ssid}”',
                   labelStyle: TextStyle(color: DashTheme.inkFaint),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _showPw ? Icons.visibility_off : Icons.visibility,
+                      color: DashTheme.inkFaint,
+                    ),
+                    tooltip: _showPw ? 'Hide password' : 'Show password',
+                    onPressed: () => setState(() => _showPw = !_showPw),
+                  ),
                   filled: true,
                   fillColor: DashTheme.surfaceAlt,
                   enabledBorder: OutlineInputBorder(

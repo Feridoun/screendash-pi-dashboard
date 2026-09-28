@@ -5,9 +5,10 @@ import 'package:intl/intl.dart';
 
 import '../theme.dart';
 
-/// The wall clock: time on the left, weekday over date on the right. Lives at
-/// the top of the calendar column, on the column's own surface — so unlike the
-/// old floating overlay it needs no scrim or plate to stay readable.
+/// The wall clock: weekday, date and time stacked, largest first. Lives at the
+/// top-left of the calendar column with the outlook alongside it, on the
+/// column's own surface — so unlike the old floating overlay it needs no scrim
+/// or plate to stay readable.
 class ClockHeader extends StatefulWidget {
   const ClockHeader({super.key});
 
@@ -37,11 +38,42 @@ class _ClockHeaderState extends State<ClockHeader> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    // One left-aligned stack, read top to bottom: which day it is, which date,
+    // what time. Weekday and time carry the same weight so both read from
+    // across the room, with the date a quieter line between them. Stacking
+    // rather than spreading them across the column leaves the whole right-hand
+    // side to the outlook.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
+          DateFormat('EEEE').format(_now),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: DashTheme.ink,
+            fontSize: 34,
+            fontWeight: FontWeight.w600,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          DateFormat('d MMM y').format(_now),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: DashTheme.inkSoft,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
           DateFormat('h:mm a').format(_now),
+          maxLines: 1,
           style: const TextStyle(
             color: DashTheme.ink,
             fontSize: 34,
@@ -49,31 +81,6 @@ class _ClockHeaderState extends State<ClockHeader> {
             height: 1.0,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
-        ),
-        const Spacer(),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              DateFormat('EEEE').format(_now),
-              style: const TextStyle(
-                color: DashTheme.inkSoft,
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                height: 1.2,
-              ),
-            ),
-            Text(
-              DateFormat('d MMM y').format(_now),
-              style: const TextStyle(
-                color: DashTheme.inkFaint,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                height: 1.2,
-              ),
-            ),
-          ],
         ),
       ],
     );

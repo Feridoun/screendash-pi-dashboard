@@ -20,6 +20,13 @@ set -euo pipefail
 # Set by provision into /etc/default/dashboard-update. No default: polling the
 # wrong origin would look like "no updates available" forever.
 BACKEND_URL="${BACKEND_URL:?set BACKEND_URL to your backend origin}"
+# Bearer token for GET /bundles/*. The Worker serves the bundle to nobody else
+# (worker/src/serve.js) because the bundle can carry build-time secrets. Written
+# by `deploy.sh provision` into /etc/default/dashboard-update, which systemd
+# reads as root before dropping to `pi`. Empty here means "unauthenticated" --
+# the download 404s against a gated backend, the update fails, and the version
+# already running stays up.
+DEVICE_TOKEN="${DEVICE_TOKEN:-}"
 ROOT="${ROOT:-/home/pi/dashboard}"
 SERVICE="${SERVICE:-dashboard.service}"
 # How long the new version must stay running before we accept it.
@@ -126,6 +133,15 @@ case "$want_version" in
   */*|*..*|"") fail "refusing unsafe version string: '$want_version'" ;;
 esac
 
+# version.json is the one input that decides where we connect, and the next
+# request carries DEVICE_TOKEN. curl has stripped Authorization across cross-host
+# redirects since 7.58, but don't lean on that -- refuse an off-origin bundle_url
+# outright, so the token can only ever reach the backend we were provisioned for.
+case "$bundle_url" in
+  "${BACKEND_URL%/}"/*) ;;
+  *) fail "version.json points bundle_url off-origin: $bundle_url" ;;
+esac
+
 have_version=""
 [ -L "$CURRENT_LINK" ] && have_version="$(basename "$(readlink -f "$CURRENT_LINK")")"
 
@@ -142,8 +158,19 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/dashboard-update.XXXXXX")"
 trap "rm -rf '$tmp'" EXIT
 
 log "downloading $bundle_url"
-curl -fsSL --max-time 600 --retry 3 --retry-delay 10 -o "$tmp/bundle.tar.gz" "$bundle_url" \
-  || fail "download failed"
+# The token goes in a 0600 file inside $tmp (mktemp -d already made it 0700)
+# rather than on the curl command line: /proc/<pid>/cmdline is world-readable,
+# so a -H flag would widen the token from "root and pi" to any local user.
+curl_auth=()
+if [ -n "$DEVICE_TOKEN" ]; then
+  ( umask 077; printf 'Authorization: Bearer %s\n' "$DEVICE_TOKEN" > "$tmp/auth" )
+  curl_auth=(-H "@$tmp/auth")
+else
+  log "no DEVICE_TOKEN -- this will fail if the backend gates bundle downloads"
+fi
+curl -fsSL --max-time 600 --retry 3 --retry-delay 10 \
+  "${curl_auth[@]}" -o "$tmp/bundle.tar.gz" "$bundle_url" \
+  || fail "download failed (a 404 here usually means a missing or wrong DEVICE_TOKEN)"
 
 got_sha="$(sha256sum "$tmp/bundle.tar.gz" | cut -d' ' -f1)"
 [ "$got_sha" = "$want_sha" ] \

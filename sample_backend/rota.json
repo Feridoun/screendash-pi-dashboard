@@ -1,0 +1,761 @@
+{
+  "updated": "2026-09-22T09:52:39Z",
+  "days": [
+    {
+      "date": "2026-09-22",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "away",
+          "label": "Study leave",
+          "contact": "email"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "partial",
+          "label": "8–6",
+          "detail": "Meeting 10–12",
+          "contact": "phone"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "away",
+          "label": "Sick"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-23",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "partial",
+          "label": "WFH"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "partial",
+          "label": "Remote",
+          "contact": "phone or email"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "away",
+          "label": "Sick"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-24",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-25",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-26",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-27",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-28",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "away",
+          "label": "Annual leave",
+          "contact": "none"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "partial",
+          "label": "WFH"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-01",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-02",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-03",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-04",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "off",
+          "label": "Off"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-05",
+      "people": [
+        {
+          "name": "Dr A Khan",
+          "role": "Consultant",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr B Smith",
+          "role": "Consultant",
+          "status": "off",
+          "label": "Off"
+        },
+        {
+          "name": "Dr C Lee",
+          "role": "Higher Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr D Patel",
+          "role": "Specialty Doctor",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr E Wong",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr F Ali",
+          "role": "Core Resident",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr G Brown",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        },
+        {
+          "name": "Dr H Green",
+          "role": "F1",
+          "status": "in",
+          "label": "8–6"
+        }
+      ]
+    }
+  ]
+}

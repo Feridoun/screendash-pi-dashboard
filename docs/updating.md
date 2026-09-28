@@ -75,13 +75,13 @@ Pi per [../deploy/config.txt.snippet](../deploy/config.txt.snippet) first, then:
 
 ```bash
 PI_HOST=pi@screendash.local \
-BACKEND_URL=https://screendash.<your-subdomain>.workers.dev \
-  ./deploy/deploy.sh provision
+BACKEND_URL=https://screendash.<your-subdomain>.workers.dev \nDEVICE_TOKEN=$(openssl rand -hex 32) \n  ./deploy/deploy.sh provision
 ```
 
 Installs the first bundle, both systemd units, the udev rule, the scoped sudoers files and
-`jq`; enables the app and the update timer; writes `/etc/default/dashboard-update`. It also
-does two things that are easy to miss by hand and not optional:
+`jq`; enables the app and the update timer; writes `/etc/default/dashboard-update`
+(`0600 root:root` — it now holds `DEVICE_TOKEN`). It also does two things that are easy to
+miss by hand and not optional:
 
 - **Installs the runtime libraries `flutter-pi` links against.** Pi OS Lite ships no GL
   userspace at all — eleven packages were missing on a fresh install. The shipped
@@ -109,6 +109,14 @@ version.json    { "version": "...", "bundle_url": "...", "sha256": "..." }
 
 The bundle goes up **before** `version.json` on purpose: if the pointer went first, a Pi
 polling in the gap would chase a bundle that doesn't exist yet.
+
+`version.json` is public; **`bundles/` is not**. The bundle is the one artifact that can
+carry a build-time secret — `TAILSCALE_AUTHKEY` bakes straight into it — and serving it
+anonymously made the whole chain public: fetch `version.json`, follow `bundle_url`, untar,
+grep. It now needs `Authorization: Bearer $DEVICE_TOKEN`, matching the Worker secret of the
+same name. The Worker fails **closed** if that secret is missing (503, logged), so bundle
+downloads pause rather than silently going public again. Rollout order and verification:
+[tailnet-security.md](tailnet-security.md).
 
 ## What the on-device updater guarantees
 
@@ -213,3 +221,22 @@ admin-panel sections in the [README](../README.md#getting-a-shell-on-a-remote-pi
 - **Captive-portal WiFi breaks everything here.** The Pi silently loses connectivity and no
   update or photo lands. Confirm the network is open or PSK first, or work through
   [captive-portal.md](captive-portal.md).
+- **A mismatched `DEVICE_TOKEN` looks exactly like a missing bundle.** The Worker answers
+  `404` to an unauthorised bundle request on purpose — an anonymous caller shouldn't be able
+  to confirm which versions exist — so `journalctl -u dashboard-update` shows
+  `download failed` with nothing to distinguish "wrong token" from "never uploaded". Check
+  `wrangler tail` (a `503` line means the Worker secret is missing entirely) and confirm
+  `sudo grep DEVICE_TOKEN /etc/default/dashboard-update` matches it.
+- **`wrangler tail` says `Ok` for a 404.** That label reports whether the Worker *executed*
+  without throwing, not the HTTP status it returned. A gated bundle request that correctly
+  answers `404` still logs as `Ok`, so a tail full of `GET /bundles/... - Ok` is NOT evidence
+  that a device downloaded anything. The only trustworthy confirmation is on the device:
+  `journalctl -u dashboard-update`, plus `cat state` and `readlink -f current`.
+- **`publish` does not update `update.sh` on the device.** Only `provision` copies it, so a
+  board can run a months-old updater indefinitely while `deploy.sh publish` succeeds every
+  time. This bites hardest right after changing the updater itself: on 2026-09-03 the device
+  still had the pre-`DEVICE_TOKEN` script from initial provisioning, so it never sent an
+  `Authorization` header and *every* bundle download 404'd for hours while the origin looked
+  perfectly healthy. If you change `deploy/update.sh`, push it:
+  `scp deploy/update.sh $PI_HOST:/tmp/ && ssh $PI_HOST 'install -m0755 /tmp/update.sh /home/pi/dashboard/update.sh'`
+  Confirm with `md5sum` on both ends.

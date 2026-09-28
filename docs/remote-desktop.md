@@ -110,8 +110,16 @@ docker run --rm --network guacamole_default --entrypoint /bin/sh alpine/socat \
   intended policy on its own.
 - VNC's own auth is weak (8 chars, DES) — a second factor behind the tailnet,
   not the primary control. The primary control is tailnet membership plus
-  Guacamole's SSO in front. Tighten further with a Tailscale ACL restricting
-  which nodes may reach 5901, rather than the default allow-all.
+  Guacamole's SSO in front.
+- **Tailnet membership is not enough on its own.** The board hangs in a public
+  corridor and physical access to a Pi is root access, so the default
+  allow-everything tailnet policy would turn one stolen board into a foothold on
+  every other node. [deploy/tailscale-acl.json](../deploy/tailscale-acl.json)
+  replaces it: `tag:kiosk` appears only as a destination, so a compromised board
+  can reach nothing — including this Guacamole host. The sidecar below gets
+  `tag:relay` and is allowed 5901 on the board and nothing else. Full reasoning
+  and the rest of the posture (bundle downloads, auth keys, subnet routes) in
+  [docs/tailnet-security.md](tailnet-security.md).
 
 ## Why you cannot see the wall
 
@@ -170,5 +178,8 @@ BACKEND_URL=https://screendash.<your-subdomain>.workers.dev \
 
 Then on the Guacamole host, add the two compose services and a `vnc` connection
 pointing at `tailscale-screendash:5901`. The sidecar needs its own Tailscale
-auth key (reusable + ephemeral is the sane choice, so it re-authenticates
-across container restarts and cleans itself up if removed).
+auth key — reusable + ephemeral is the sane choice for a container, so it
+re-authenticates across restarts and cleans itself up if removed — and it should
+be **tagged `tag:relay`**, which is what the ACL grants port 5901 on the board.
+(The board's own key is the opposite case: tagged `tag:kiosk`, single-use, and
+*not* ephemeral. See [docs/tailnet-security.md](tailnet-security.md).)

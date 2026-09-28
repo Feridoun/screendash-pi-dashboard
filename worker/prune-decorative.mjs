@@ -24,12 +24,17 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readDevVars } from './oauth-client.mjs';
 
 const BACKEND_URL = process.env.BACKEND_URL;
 if (!BACKEND_URL) {
   console.error('set BACKEND_URL, e.g. https://screendash.<your-subdomain>.workers.dev');
   process.exit(2);
 }
+// rebuild-manifest needs the operator's bearer token (src/admin.js), from the
+// environment or worker/.dev.vars. Checked before anything is archived, so a
+// missing token can't leave photos deleted with the manifest still listing them.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || readDevVars().ADMIN_TOKEN || '';
 const BUCKET = process.env.BUCKET || 'screendash';
 
 const args = process.argv.slice(2);
@@ -96,6 +101,15 @@ async function main() {
     return 0;
   }
 
+  if (!ADMIN_TOKEN) {
+    console.error(
+      '\n!! No ADMIN_TOKEN, so the manifest could not be republished afterwards and the\n' +
+        '   archived photos would stay listed on the wall. Nothing changed. Put it in\n' +
+        '   worker/.dev.vars (ADMIN_TOKEN = "...") or the environment, and re-run.',
+    );
+    return 1;
+  }
+
   // Archive = copy to removed/, then delete. Same contract as photos.js's own
   // archive(), just driven from outside the Worker.
   const scratch = mkdtempSync(join(tmpdir(), 'screendash-prune-'));
@@ -131,11 +145,12 @@ async function main() {
   console.log('\nRepublishing manifest…');
   const rebuilt = await fetch(`${BACKEND_URL}/admin/rebuild-manifest?_=${Date.now()}`, {
     method: 'POST',
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
   });
   const body = await rebuilt.json().catch(() => ({}));
   if (!rebuilt.ok || !body.ok) {
     console.error(`!! rebuild failed (HTTP ${rebuilt.status}) — run it by hand:`);
-    console.error(`   curl -X POST ${BACKEND_URL}/admin/rebuild-manifest`);
+    console.error(`   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" ${BACKEND_URL}/admin/rebuild-manifest`);
     return 1;
   }
 

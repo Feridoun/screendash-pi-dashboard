@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -247,6 +248,101 @@ void main() {
     expect(DashTheme.parseHex(null), isNull);
   });
 
+  // The Pi has no system font with emoji coverage, so an emoji in a notice
+  // draws a tofu box unless the bundled fallback is wired up. That failure is
+  // invisible on a dev machine -- Windows and macOS both fall back to their own
+  // emoji font -- so it can only be caught here or on the wall itself.
+  test('theme carries the bundled emoji fallback', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+
+    // Checked on every platform, not just the host's. The blank-dashboard
+    // regression was invisible on Windows -- its primary family, Segoe UI,
+    // exists there -- and only appeared on the Pi, where the primary family
+    // did not exist and the emoji font became the face for all text.
+    for (final platform in TargetPlatform.values) {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final text = DashTheme.build().textTheme;
+
+      // Every role, not just body: notices, names and the clock all draw text a
+      // visitor could put an emoji into.
+      for (final style in [
+        text.bodyMedium,
+        text.titleLarge,
+        text.displayLarge
+      ]) {
+        // The invariant that actually matters: a family with Latin coverage
+        // has to resolve BEFORE the emoji font. Presence alone is not enough.
+        expect(style!.fontFamily, 'Roboto', reason: 'on $platform');
+        expect(style.fontFamilyFallback, contains('NotoColorEmoji'),
+            reason: 'on $platform');
+        expect(pubspec, contains('family: ${style.fontFamily}'),
+            reason: 'primary family must be bundled, not assumed present');
+      }
+    }
+    debugDefaultTargetPlatformOverride = null;
+
+    // A fallback is worthless if the assets it names aren't shipped.
+    for (final f in [
+      'NotoColorEmoji',
+      'Roboto-Regular',
+      'Roboto-Medium',
+      'Roboto-Bold',
+      'Roboto-Black',
+    ]) {
+      expect(File('fonts/$f.ttf').existsSync(), isTrue, reason: 'fonts/$f.ttf');
+    }
+  });
+
+  testWidgets('an emoji notice keeps the fallback after style merging',
+      (tester) async {
+    // The banner builds a bare TextStyle(fontSize: ...), relying on merge to
+    // inherit the fallback from the theme. A widget that passed inherit: false
+    // would silently opt back out into tofu, so assert on the resolved style.
+    const notice = 'Coffee machine fixed 😎';
+    final controller = MotdController(
+      config: const AppConfig(),
+      client: BackendClient(
+        // Response.bytes, not Response(String): the string constructor encodes
+        // as latin1 and would throw on the emoji. Bytes are what the wire
+        // actually carries, and they exercise the client's own decoding.
+        httpClient: MockClient((_) async => http.Response.bytes(
+              utf8.encode(
+                jsonEncode({'text': notice, 'updated': '2026-07-29T08:05:00Z'}),
+              ),
+              200,
+              // Deliberately no charset -- exactly what the worker sends.
+              headers: {'content-type': 'application/json'},
+            )),
+      ),
+    );
+    await controller.poll();
+
+    // Non-ASCII has to survive the wire before any font question arises. This
+    // passes on http >=1.4 either way, but pins the behaviour against a
+    // resolution to an older allowed version, where an uncharsetted
+    // application/json decodes as latin1 and this becomes mojibake.
+    expect(controller.motd.text, notice);
+
+    await tester.pumpWidget(MaterialApp(
+      theme: DashTheme.build(),
+      home: ChangeNotifierProvider<MotdController>.value(
+        value: controller,
+        child: const Scaffold(body: MotdBanner()),
+      ),
+    ));
+
+    final text = tester.widget<Text>(find.text(notice));
+    final resolved = DefaultTextStyle.of(
+      tester.element(find.text(notice)),
+    ).style.merge(text.style);
+
+    expect(resolved.fontFamilyFallback, contains('NotoColorEmoji'));
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(AppConfig.motdScrollHold * 2);
+  });
+
   test('dim controller construction and schedule sanity', () {
     final calls = <bool>[];
     final dim = DimController(hardwarePower: (on) async => calls.add(on));
@@ -328,6 +424,40 @@ void main() {
     expect(dim.scrimOpacity, 1.0);
     await Future<void>.delayed(Duration.zero);
     expect(calls.last, isFalse);
+
+    dim.dispose();
+  });
+
+  // The scrim wakes on every pointer move, so a mouse that keeps moving must
+  // keep pushing the countdown out rather than letting the panel drop away
+  // mid-use. testWidgets gives us a fake clock to run the window against.
+  testWidgets('a second wake restarts the countdown rather than stacking',
+      (tester) async {
+    final dim =
+        DimController(hardwarePower: (_) async {}, store: scratchStore());
+    if (DateTime.now().hour == 0) {
+      dim.updateSchedule(
+          activeStartHour: 23, activeEndHour: 24, dimmedEndHour: 24);
+    } else {
+      dim.updateSchedule(activeStartHour: 0, activeEndHour: 1, dimmedEndHour: 1);
+    }
+    await tester.pump();
+    expect(dim.isDark, isTrue);
+
+    dim.wake();
+    expect(dim.isAwake, isTrue);
+
+    // A move partway through the window: the original 60s expiry is now moot.
+    await tester.pump(const Duration(seconds: 40));
+    dim.wake();
+
+    await tester.pump(const Duration(seconds: 40));
+    expect(dim.isAwake, isTrue,
+        reason: 'past the first wake\'s expiry, inside the second\'s');
+
+    await tester.pump(const Duration(seconds: 30));
+    expect(dim.isAwake, isFalse, reason: 'stillness lets the schedule resume');
+    expect(dim.scrimOpacity, 1.0);
 
     dim.dispose();
   });

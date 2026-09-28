@@ -4,8 +4,14 @@ import '../../models/calendar_grid.dart';
 import '../theme.dart';
 
 /// Renders the rolling 14-day grid: a Mon-first weekday header over rows of
-/// day-cells. Today gets an accent fill. Read-only and static — no scrolling,
-/// no month navigation.
+/// day-cells. Today gets an accent fill, and the weekend recedes. Read-only and
+/// static — no scrolling, no month navigation.
+///
+/// Saturday and Sunday are drawn a step back from the working week — a darker
+/// fill than the column's own surface and a quieter number — so the shape of a
+/// week is legible at a glance without anyone counting columns. It is a
+/// recession, not a highlight: on an office board the days that matter are the
+/// ones people are in.
 class CalendarGridView extends StatelessWidget {
   const CalendarGridView({super.key, required this.grid});
 
@@ -17,18 +23,21 @@ class CalendarGridView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Weekday header (Mon-first).
+        // Weekday header (Mon-first). The last two columns are the weekend.
         Row(
           children: [
-            for (final label in CalendarGrid.weekdayLabels)
+            for (var i = 0; i < CalendarGrid.weekdayLabels.length; i++)
               Expanded(
                 child: Center(
                   child: Text(
-                    label,
+                    CalendarGrid.weekdayLabels[i],
                     style: TextStyle(
-                      color: DashTheme.inkFaint,
+                      color: _isWeekendColumn(i)
+                          ? DashTheme.inkFaint
+                          : DashTheme.inkSoft,
                       fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                      fontWeight:
+                          _isWeekendColumn(i) ? FontWeight.w500 : FontWeight.w700,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -53,6 +62,9 @@ class CalendarGridView extends StatelessWidget {
   }
 }
 
+/// Whether column [index] of a Monday-first header is Saturday or Sunday.
+bool _isWeekendColumn(int index) => index >= 5;
+
 class _Cell extends StatelessWidget {
   const _Cell({required this.cell});
   final GridCell cell;
@@ -64,13 +76,23 @@ class _Cell extends StatelessWidget {
     }
 
     final today = cell.isToday;
+    // Today outranks the weekend: a Saturday that is today still gets the
+    // accent, or the board would quietly stop showing where "now" is for two
+    // days out of every seven.
+    final weekend = !today && cell.date!.weekday >= DateTime.saturday;
     return Padding(
       padding: const EdgeInsets.all(3),
       child: AspectRatio(
         aspectRatio: 1,
         child: Container(
           decoration: BoxDecoration(
-            color: today ? DashTheme.accent : DashTheme.surfaceAlt,
+            color: today
+                ? DashTheme.accent
+                : weekend
+                    // Darker than the column it sits on, so the weekend reads
+                    // as a hole in the week rather than another working day.
+                    ? DashTheme.bg
+                    : DashTheme.surfaceAlt,
             borderRadius: BorderRadius.circular(8),
             border: today
                 ? null
@@ -80,9 +102,17 @@ class _Cell extends StatelessWidget {
             child: Text(
               '${cell.date!.day}',
               style: TextStyle(
-                color: today ? const Color(0xFF1A140A) : DashTheme.ink,
+                color: today
+                    ? const Color(0xFF1A140A)
+                    : weekend
+                        ? DashTheme.inkFaint
+                        : DashTheme.ink,
                 fontSize: 22,
-                fontWeight: today ? FontWeight.w800 : FontWeight.w600,
+                fontWeight: today
+                    ? FontWeight.w800
+                    : weekend
+                        ? FontWeight.w500
+                        : FontWeight.w600,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),

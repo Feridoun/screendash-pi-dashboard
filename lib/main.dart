@@ -10,6 +10,8 @@ import 'controllers/dim_controller.dart';
 import 'controllers/message_controller.dart';
 import 'controllers/motd_controller.dart';
 import 'controllers/photo_controller.dart';
+import 'controllers/rota_controller.dart';
+import 'controllers/weather_controller.dart';
 import 'services/backend_client.dart';
 import 'ui/dashboard_screen.dart';
 import 'ui/theme.dart';
@@ -46,6 +48,8 @@ class _DashboardAppState extends State<DashboardApp> {
   late final MotdController _motd;
   late final MessageController _messages;
   late final DirectoryController _directory;
+  late final RotaController _rota;
+  late final WeatherController _weather;
   late final DimController _dim;
   late final CelebrationController _celebration;
 
@@ -68,6 +72,8 @@ class _DashboardAppState extends State<DashboardApp> {
     )..start();
     _messages = MessageController(config: _config, client: _client)..start();
     _directory = DirectoryController(config: _config, client: _client)..start();
+    _rota = RotaController(config: _config, client: _client)..start();
+    _weather = WeatherController(config: _config, client: _client)..start();
     _dim = DimController()..start();
   }
 
@@ -78,6 +84,8 @@ class _DashboardAppState extends State<DashboardApp> {
     _motd.dispose();
     _messages.dispose();
     _directory.dispose();
+    _rota.dispose();
+    _weather.dispose();
     _dim.dispose();
     _celebration.dispose();
     _client.close();
@@ -93,6 +101,8 @@ class _DashboardAppState extends State<DashboardApp> {
         ChangeNotifierProvider.value(value: _motd),
         ChangeNotifierProvider.value(value: _messages),
         ChangeNotifierProvider.value(value: _directory),
+        ChangeNotifierProvider.value(value: _rota),
+        ChangeNotifierProvider.value(value: _weather),
         ChangeNotifierProvider.value(value: _dim),
         ChangeNotifierProvider.value(value: _celebration),
       ],

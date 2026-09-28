@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 /// One recorded chat entry, from an email whose subject starts with
-/// "message:".
+/// "message".
 @immutable
 class ChatMessage {
   final String sender;

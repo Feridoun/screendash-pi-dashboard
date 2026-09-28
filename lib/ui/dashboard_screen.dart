@@ -15,20 +15,22 @@ import 'widgets/status_overlay.dart';
 /// The single, pixel-stable kiosk layout.
 ///
 ///  ┌──────────────┬──────────────┬──────────────┐
-///  │              │ CLOCK + DATE │ DIRECTORY    │
+///  │              │ CLOCK │ SKY  │ DIRECTORY    │
 ///  │  PHOTO       ├──────────────┤  grouped     │
 ///  │  STAGE       │ CALENDAR     │  contacts    │
-///  │              │  14-day grid │              │
-///  │              │ AGENDA       │              │
-///  │              │  next meets  │              │
+///  │              │  14-day grid ├──────────────┤
+///  │              │ MESSAGES     │ DOCTORS ROTA │
+///  │              │  latest      │  who's in    │
 ///  ├──────────────┴──────────────┴──────────────┤
 ///  │                 MOTD banner                 │
 ///  └─────────────────────────────────────────────┘
 ///
 /// The three columns are equal thirds of the width.
 ///
-/// A status overlay floats bottom-right, and the whole thing sits under an
-/// animated dim scrim.
+/// A status overlay floats bottom-right of the column area — confined above
+/// the banner so its config/refresh icons never sit over the notice
+/// controls, which float in that same corner of the banner — and the whole
+/// thing sits under an animated dim scrim.
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
@@ -43,24 +45,32 @@ class DashboardScreen extends StatelessWidget {
           Column(
             children: [
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                // Nested so the floating status icons stay confined to the
+                // column area and can never sit over the banner below — its
+                // own controls float in the same bottom-right corner.
+                child: Stack(
+                  fit: StackFit.expand,
                   children: const [
-                    // Three equal thirds: photo, calendar, directory.
-                    Expanded(child: PhotoStage()),
-                    _ColumnDivider(),
-                    Expanded(child: CalendarColumn()),
-                    _ColumnDivider(),
-                    Expanded(child: DirectoryColumn()),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Three equal thirds: photo, calendar, directory.
+                        Expanded(child: PhotoStage()),
+                        _ColumnDivider(),
+                        Expanded(child: CalendarColumn()),
+                        _ColumnDivider(),
+                        Expanded(child: DirectoryColumn()),
+                      ],
+                    ),
+
+                    // --- Floating status (config gear + refresh dot) ---
+                    StatusOverlay(),
                   ],
                 ),
               ),
               const MotdBanner(),
             ],
           ),
-
-          // --- Floating status (clock + connectivity dot) ---
-          const StatusOverlay(),
 
           // --- Brief burst when a new notice or photo lands ---
           const CelebrationOverlay(),
@@ -115,10 +125,14 @@ class _ColumnDivider extends StatelessWidget {
 /// A black overlay whose opacity is driven by the DimController. Animates
 /// smoothly so the day→evening transition fades rather than snaps.
 ///
-/// While the scrim is up it also swallows taps and turns them into a wake: on a
-/// dimmed or blanked screen the first touch relights the panel rather than
-/// hitting whatever button happens to sit underneath. Fully bright, it is
-/// pointer-transparent and the dashboard behaves normally.
+/// Waking it is primarily a matter of moving the mouse: any pointer movement
+/// over the board relights the panel, and keeps the wake window rolling while
+/// someone is still there, without them having to press anything.
+///
+/// Touch has no hover, so while the scrim is up it also swallows taps and turns
+/// them into a wake: on a dimmed or blanked screen the first touch relights the
+/// panel rather than hitting whatever button happens to sit underneath. Fully
+/// bright, it is pointer-transparent and the dashboard behaves normally.
 class _DimScrim extends StatelessWidget {
   const _DimScrim();
 
@@ -131,12 +145,21 @@ class _DimScrim extends StatelessWidget {
       color: Colors.black.withValues(alpha: dim.scrimOpacity),
     );
 
-    if (!dim.isDark) return IgnorePointer(child: scrim);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: dim.wake,
-      child: scrim,
+    // `opaque: false` keeps this a passive observer: it reports hovers without
+    // claiming them, so cursors and hover effects underneath still work, and it
+    // stays mounted even while bright so a moving mouse can extend the window.
+    return MouseRegion(
+      opaque: false,
+      onHover: (_) {
+        if (dim.isDark || dim.isAwake) dim.wake();
+      },
+      child: dim.isDark
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: dim.wake,
+              child: scrim,
+            )
+          : IgnorePointer(child: scrim),
     );
   }
 }

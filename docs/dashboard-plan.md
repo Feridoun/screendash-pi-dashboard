@@ -27,9 +27,10 @@ re-flash.
 /events.json      events covering the next 14 days
 /motd.json        banner text + optional accent color
 /directory.json   grouped phone/email directory
+/rota.json        who is in, per person per day, for the next fortnight
 ```
 
-All five are read anonymously over HTTPS. Adding a feature means adding an artifact,
+All of them are read anonymously over HTTPS. Adding a feature means adding an artifact,
 not adding a capability to the device.
 
 ## Backend flow
@@ -44,7 +45,8 @@ staff@yourteam.dev  --email-->  your-dashboard@gmail.com
                                    |
    1. SELECT: messages without the "screendash-done" label, not spam/trash
    2. GATE:   skip unless From ends in "@yourteam.dev"
-   3. ROUTE on subject: notice: / pinphoto: / delete: / else photos
+   3. ROUTE on the subject command: notice / message / pinphoto / delete /
+      else photos; the body carries the text or target
    4. LABEL "screendash-done" — only after success
 ```
 
@@ -72,6 +74,25 @@ Sheet (`Group | Name | Role | Phone | Email`, matched by header name) on the sam
 result is never rewritten, so a cleared sheet leaves the last good directory on the
 wall and idle syncs don't churn the R2 ETag.
 
+`rota.json` is the same idea with two tabs and some arithmetic. `Team` is the usual
+weekly pattern (`Name | Role | Mon … Fri | From | Until`), `Leave` the exceptions
+(`Name | First day | Last day | Type | Hours | Contact | Note`), the latter normally
+fed by a Google Form. The Worker resolves them — pattern first, exceptions on top,
+later rows winning, a `cancel` row restoring the pattern — into one status per person
+per day for the next fortnight, computed against the office's timezone rather than
+the Worker's UTC. **The device does no rota reasoning at all**: it looks up today's
+date and draws the rows. Dates are read as `UNFORMATTED_VALUE` so a Form's date cell
+arrives as a serial number rather than as whatever the sheet's locale prints, and the
+wording ("Study leave") is decided on the backend for the same reason the weather
+text is — rewording is a Worker deploy, not an app rebuild.
+
+Why a Sheet and a Form rather than a shared Google Calendar, which is the obvious
+first thought: the doctors' mail is on yourteam.dev, not Google, and a Google Calendar can only be edited
+by Google accounts, whereas a Sheet or Form set to *anyone with the link* needs no
+login. Recurring-series edits are also where non-technical users delete whole series.
+The board can't tell the difference — the artifact is source-agnostic, so a calendar
+reader can be added to the Worker later without touching the device.
+
 Subject-line semantics and the full setup sequence are in
 [cloudflare-setup.md](cloudflare-setup.md).
 
@@ -94,6 +115,16 @@ Subject-line semantics and the full setup sequence are in
 { "updated": "2026-07-23T09:00:00Z",
   "groups": [ { "name": "Engineering", "people": [
     { "name": "Priya Shah", "role": "Eng Lead", "phone": "x4021", "email": "priya@yourteam.dev" } ] } ] }
+
+// rota.json — one entry per person per day, sheet order, fully resolved
+{ "updated": "2026-09-18T07:15:00Z",
+  "days": [ { "date": "2026-09-18", "people": [
+    { "name": "Dr A Khan",  "role": "Consultant", "status": "in",      "label": "8–6" },
+    { "name": "Dr B Smith", "role": "Consultant", "status": "away",    "label": "Study leave", "contact": "email" },
+    { "name": "Dr C Lee",   "role": "Higher Resident", "status": "off", "label": "Off" },
+    { "name": "Dr D Patel", "role": "Specialty Doctor", "status": "partial",
+      "label": "8–6", "detail": "Meeting 10–12", "contact": "phone" } ] } ] }
+// status ∈ in | partial | away | off decides the dot; label/detail/contact are shown as sent.
 ```
 
 ## OS configuration and its traps
@@ -163,8 +194,9 @@ not reflow.
 |                  |  CALENDAR (14-day)  |   DIRECTORY    |
 |   PHOTO STAGE    |  Mon Tue Wed Thu…   |   Engineering  |
 |   (dominant,     |   [rolling grid,    |     Priya Shah |
-|    cross-fades)  |    today highlit]   |   Operations   |
-|                  |  AGENDA             |     Front Desk |
+|    cross-fades)  |    today highlit]   +----------------+
+|                  |  MESSAGES           |  DOCTORS ROTA  |
+|                  |   latest first      |   ● Dr A Khan  |
 +------------------+---------------------+----------------+
 |                        MOTD banner                       |
 +----------------------------------------------------------+
@@ -184,13 +216,44 @@ number, `today` emphasized with an accent ring, and a marker or count when that 
 has events. It is deliberately read-only — no scrolling, no month navigation. It's
 ambient, not interactive.
 
-The agenda beneath flattens and sorts the same `events.json` the grid buckets by day:
-the "what's actually next" companion to the grid's "shape of the fortnight".
+Beneath the grid, the messages panel takes whatever height is left and scrolls its
+own overflow. An agenda list of upcoming meetings used to sit here, drawing from the
+same `events.json` as the grid; the grid stays, and the events feed still drives it.
 
 ### Directory
 
-A compact grouped column on the dashboard; clicking it opens a scrollable full-screen
-version with job titles. Same models and widgets, more room to breathe.
+The upper half of the right-hand column: a compact grouped list that scrolls in
+place, with a lower banner — *Scroll, or click to expand* — saying so. Clicking it
+opens a scrollable full-screen version with job titles. Same models and widgets, more
+room to breathe.
+
+### The doctors rota
+
+The lower half of the right-hand column: who is in today, one row per doctor in the
+order the rota sheet lists them, as a table — name, role, day — so the eye can run
+down a column. A dot carries the across-the-room message — green in, amber in-but-not-
+on-the-ward (a meeting window, working from home), red away (leave, study, sick),
+hollow not-their-day — and the day column carries the rest from a few steps closer:
+the hours (`8–6`), the caveat (`8–6 · Meeting 10–12`), and how to reach them
+(`Study leave · email`). Every person on the roster is drawn, always: a doctor missing
+from the wall reads as "not in", which is the one thing the card must never say by
+accident.
+
+It has to fit its half whatever size the rotation brings, so it measures and takes
+the roomiest layout that does: one column at the largest type, then tighter type,
+then two columns (read down, then across). At the board's geometry a team of twelve
+still gets a single column with roles; the split comes at thirteen. Roles and the full
+"hours · caveat" show only in the single-column layout — a 288 px cell can't hold a
+name, a role and "8–6 · Meeting 10–12 · phone" at wall-readable sizes — so a narrow
+cell leads with the caveat, and a team that wants roles regardless puts a short one in
+brackets after the name on the sheet. The rows keep clear of the strip in the corner
+where the status overlay's gear and refresh icons float. `test/directory_column_test.dart`
+pins the fit at 1920×1080; `test/rota_test.dart` pins the layout choices.
+
+At the weekend the card looks ahead to Monday, retitled `DOCTORS ROTA · MONDAY`, unless
+the roster says someone actually works that day. And like the weather strip, it refuses
+to show a rota that doesn't cover today: a stopped sync means "Rota not available",
+never yesterday's roster presented as today's.
 
 ## Build and deploy
 

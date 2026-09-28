@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 /**
- * One-time helper: obtain a long-lived Google refresh token covering all three
- * scopes this backend needs — calendar (read), Gmail (read + label) and Sheets
- * (read).
+ * One-time helper: obtain a long-lived Google refresh token covering all four
+ * scopes this backend needs — calendar (read), Gmail (read + label + send),
+ * Sheets (read) and Forms (edit the leave Form's name list).
  *
  * Run this ON YOUR LAPTOP (it opens a browser). The Pi never runs it — the
  * resulting refresh token is stored as a Worker secret and the device only ever
  * reads the artifacts the Worker publishes.
  *
  *   node get-refresh-token.mjs <CLIENT_ID> <CLIENT_SECRET>
+ *   node get-refresh-token.mjs            # with the client in worker/.dev.vars
  *
  * Prerequisites in Google Cloud Console:
- *   1. Enable the "Google Calendar API", the "Gmail API" and the
- *      "Google Sheets API".
+ *   1. Enable the "Google Calendar API", the "Gmail API", the
+ *      "Google Sheets API" and the "Google Forms API".
  *   2. Create an OAuth client ID of type "Web application".
  *   3. Add  http://localhost:8976/callback  as an authorised redirect URI.
  *   4. On the OAuth consent screen, add the Google account you'll be reading
@@ -24,13 +25,12 @@
  */
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { oauthClient } from './oauth-client.mjs';
 
-const [, , CLIENT_ID, CLIENT_SECRET] = process.argv;
-
-if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error('usage: node get-refresh-token.mjs <CLIENT_ID> <CLIENT_SECRET>');
-  process.exit(1);
-}
+// Arguments, the environment, or worker/.dev.vars — see oauth-client.mjs.
+const { CLIENT_ID, CLIENT_SECRET } = oauthClient(process.argv.slice(2), {
+  script: 'get-refresh-token.mjs',
+});
 
 const PORT = 8976;
 const REDIRECT = `http://localhost:${PORT}/callback`;
@@ -38,11 +38,15 @@ const REDIRECT = `http://localhost:${PORT}/callback`;
 // gmail.modify         -> read messages + apply the processed label (readonly is
 //                         not enough: we must label handled mail so the poller is
 //                         idempotent).
-// spreadsheets.readonly-> the directory sheet behind directory.json
+// spreadsheets.readonly-> the directory sheet behind directory.json, and the rota
+// forms.body           -> keep the leave Form's Name dropdown in step with the
+//                         rota's Team tab (src/forms.js). Needs the Google Forms
+//                         API enabled on the Cloud project.
 const SCOPE = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/forms.body',
 ].join(' ');
 
 const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');

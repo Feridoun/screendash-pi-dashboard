@@ -15,10 +15,15 @@
 const PIN_KEY = 'pin.json';
 
 /**
- * Where removed photos go. A delete arriving by email is one keystroke away
- * from a mistake, and this prefix is not in serve.js's allow-list, so archiving
- * costs a few hundred KB and buys a restore path:
+ * Where photos go when they leave the rotation — both an emailed `delete:` and
+ * an age-out under MAX_PHOTOS. A delete is one keystroke away from a mistake
+ * and a cull is nobody's decision at all, so neither gets to destroy the only
+ * copy. This prefix is not in serve.js's allow-list, so archiving costs a few
+ * hundred KB and buys a restore path:
  *   wrangler r2 object get screendash/removed/<file> --file <file> --remote
+ *
+ * Nothing prunes `removed/` itself; it grows forever by design. At ~300 KB a
+ * photo that is a few MB a year — cheap against losing one.
  */
 const REMOVED_PREFIX = 'removed/';
 
@@ -261,8 +266,8 @@ export async function storePhotos(
 }
 
 /**
- * Keep only the newest MAX_PHOTOS images, then write manifest.json.
- * Photo keys sort chronologically because they're date+timestamp prefixed.
+ * Keep only the newest MAX_PHOTOS images in rotation, archiving the rest to
+ * `removed/`, then write manifest.json.
  */
 export async function pruneAndRebuildManifest(env) {
   const max = parseInt(env.MAX_PHOTOS || '40', 10);
@@ -285,8 +290,12 @@ export async function pruneAndRebuildManifest(env) {
     else drop.push(obj);
   }
 
+  // Archived, not deleted — same as an emailed `delete:`. Aging out of the
+  // rotation is a display decision, and it should not be the thing that loses
+  // the only copy of a photo somebody sent in. `drop` is empty on almost every
+  // intake, so the extra get+put this costs over a bare delete is rarely paid.
   for (const obj of drop) {
-    await env.DASH.delete(obj.key);
+    await archive(env, obj.key.replace(/^photos\//, ''));
   }
 
   // A pin can outlive its photo (deleted by hand, or never stored). Clear it

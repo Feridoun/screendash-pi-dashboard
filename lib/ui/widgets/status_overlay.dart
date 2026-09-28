@@ -5,6 +5,7 @@ import '../../controllers/calendar_controller.dart';
 import '../../controllers/directory_controller.dart';
 import '../../controllers/motd_controller.dart';
 import '../../controllers/photo_controller.dart';
+import '../../controllers/rota_controller.dart';
 import '../theme.dart';
 import 'dim_schedule_dialog.dart';
 
@@ -27,10 +28,11 @@ class StatusOverlay extends StatefulWidget {
 class _StatusOverlayState extends State<StatusOverlay> {
   bool _refreshing = false;
 
-  /// Pull everything now. Calendar and directory go via [refreshFromSource],
-  /// which first tells the backend to re-read Google Calendar / the Sheet —
-  /// otherwise we would just re-download the artifact its cron last wrote, and
-  /// an edit made a minute ago would stay invisible for another fifteen.
+  /// Pull everything now. Calendar, directory and rota go via
+  /// [refreshFromSource], which first tells the backend to re-read Google
+  /// Calendar / the Sheets — otherwise we would just re-download the artifact
+  /// its cron last wrote, and an edit made a minute ago would stay invisible
+  /// for another fifteen.
   Future<void> _refreshNow() async {
     if (_refreshing) return;
     setState(() => _refreshing = true);
@@ -40,6 +42,7 @@ class _StatusOverlayState extends State<StatusOverlay> {
         context.read<MotdController>().refreshNow(),
         context.read<CalendarController>().refreshFromSource(),
         context.read<DirectoryController>().refreshFromSource(),
+        context.read<RotaController>().refreshFromSource(),
       ]);
     } finally {
       if (mounted) setState(() => _refreshing = false);

@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../config/app_config.dart';
+
 /// Read-only diagnostics plus a few narrow recovery actions, driven from the
 /// hidden admin panel ([lib/ui/admin_panel.dart]).
 ///
@@ -182,24 +184,51 @@ class SystemOps {
       }
     }
 
-    final up = await _run(
-      'sudo',
-      [
-        '-n',
-        'tailscale',
-        'up',
-        '--authkey=$authKey',
-        '--ssh',
-        '--hostname=screendash',
-      ],
-      timeout: const Duration(seconds: 60),
-    );
+    // --accept-routes=false is stated rather than assumed: it is the default,
+    // but `tailscale up` persists flags from previous runs, and this is the one
+    // flag that decides whether the board installs subnet routes advertised by
+    // other nodes — i.e. whether someone else's LAN appears behind a device on
+    // a public wall. See docs/tailnet-security.md.
+    List<String> args({required bool tagged}) => [
+          '-n',
+          'tailscale',
+          'up',
+          '--authkey=$authKey',
+          '--ssh',
+          '--hostname=screendash',
+          '--accept-routes=false',
+          if (tagged) '--advertise-tags=${AppConfig.tailscaleTag}',
+        ];
+
+    final wantTag = AppConfig.tailscaleTag.isNotEmpty;
+    var up = await _run('sudo', args(tagged: wantTag), timeout: const Duration(seconds: 60));
+
+    // A tagged join is refused outright if the policy file has no tagOwners
+    // entry for the tag, or the key's owner may not apply it. That must not
+    // strand a board we are using this panel to recover, so retry untagged —
+    // and say so in the result, because untagged means the containment policy
+    // in deploy/tailscale-acl.json does not cover this node.
+    var untagged = false;
+    if (up.code != 0 && wantTag) {
+      final retry = await _run('sudo', args(tagged: false), timeout: const Duration(seconds: 60));
+      if (retry.code == 0) {
+        up = retry;
+        untagged = true;
+      }
+    }
     if (up.code != 0) {
       return ActionResult.fail('tailscale up failed. ${_tail(up.err.isEmpty ? up.out : up.err)}');
     }
 
     final ip = await _run('tailscale', ['ip', '-4']);
     final addr = ip.ok ? ip.out.split('\n').first : '(check the admin console)';
+    if (untagged) {
+      return ActionResult.ok(
+        'On the tailnet as an UNTAGGED node — ${AppConfig.tailscaleTag} was refused, '
+        'so the kiosk ACL does not cover it. SSH to  pi@$addr  and re-join with a '
+        'tagged key once the policy is saved.',
+      );
+    }
     return ActionResult.ok('On the tailnet. SSH to  pi@$addr');
   }
 

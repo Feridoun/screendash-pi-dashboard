@@ -1,7 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:screendash/models/calendar_event.dart';
 import 'package:screendash/models/calendar_grid.dart';
+import 'package:screendash/ui/theme.dart';
+import 'package:screendash/ui/widgets/calendar_grid_view.dart';
 
 /// Convenience: build a grid with no events.
 CalendarGrid gridFor(DateTime today) =>
@@ -107,6 +110,63 @@ void main() {
       final others =
           grid.cells.where((c) => !c.isBlank && !c.isToday);
       expect(others.every((c) => c.eventCount == 0), isTrue);
+    });
+  });
+
+  group('CalendarGridView', () {
+    // Monday 20 July 2026, so the 14-day span is 20 Jul – 2 Aug and every day
+    // number in it is unique — a cell can be found by its text.
+    final monday = DateTime(2026, 7, 20);
+
+    Future<void> pumpGrid(WidgetTester tester) => tester.pumpWidget(
+          MaterialApp(
+            theme: DashTheme.build(),
+            home: Scaffold(
+              body: SizedBox(width: 592, child: CalendarGridView(grid: gridFor(monday))),
+            ),
+          ),
+        );
+
+    /// The painted decoration of the cell showing [day].
+    BoxDecoration cellFor(WidgetTester tester, String day) =>
+        tester.firstWidget<Container>(find.ancestor(
+          of: find.text(day),
+          matching: find.byType(Container),
+        )).decoration! as BoxDecoration;
+
+    TextStyle numberFor(WidgetTester tester, String day) =>
+        tester.widget<Text>(find.text(day)).style!;
+
+    testWidgets('sets the weekend back from the working week', (tester) async {
+      await pumpGrid(tester);
+
+      // Sat 25 and Sun 26 July against Tue 21 — a weekday that is not today.
+      for (final weekend in ['25', '26']) {
+        expect(cellFor(tester, weekend).color, DashTheme.bg,
+            reason: 'weekend cell $weekend should recede');
+        expect(numberFor(tester, weekend).color, DashTheme.inkFaint);
+      }
+      expect(cellFor(tester, '21').color, DashTheme.surfaceAlt);
+      expect(numberFor(tester, '21').color, DashTheme.ink);
+    });
+
+    testWidgets('today keeps the accent even when it falls on a weekend',
+        (tester) async {
+      // Saturday 25 July 2026 as today: the first real cell is a weekend day.
+      final saturday = DateTime(2026, 7, 25);
+      expect(saturday.weekday, DateTime.saturday);
+
+      await tester.pumpWidget(MaterialApp(
+        theme: DashTheme.build(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 592,
+            child: CalendarGridView(grid: gridFor(saturday)),
+          ),
+        ),
+      ));
+
+      expect(cellFor(tester, '25').color, DashTheme.accent);
     });
   });
 

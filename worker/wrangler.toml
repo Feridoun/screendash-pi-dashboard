@@ -9,9 +9,9 @@ binding = "DASH"
 bucket_name = "screendash"
 
 # --- Schedules --------------------------------------------------------------
-# Every 5 min : poll Gmail for new photos / notice: / pinphoto: emails.
-# Every 15 min: sync Google Calendar into events.json, and the Sheet into
-#               directory.json.
+# Every 5 min : poll Gmail for new photos / notice / pinphoto emails.
+# Every 15 min: sync Google Calendar into events.json, and the Sheets into
+#               directory.json and rota.json.
 # index.js branches on event.cron to decide which job to run.
 [triggers]
 crons = ["*/5 * * * *", "*/15 * * * *"]
@@ -47,6 +47,55 @@ DIRECTORY_SHEET_ID = ""
 # Tab name + columns. A:E covers Group | Name | Role | Phone | Email.
 DIRECTORY_SHEET_RANGE = "Directory!A:E"
 
+# --- The team rota behind rota.json: who is in today, and when. A second
+# spreadsheet rather than more tabs on the directory one, so it can be shared
+# more widely (a Form writes into it) without opening the directory up too.
+# Leave it empty to publish no rota; the app shows its placeholder.
+# This deployment: the "Team" spreadsheet in the dashboard account's Drive.
+ROTA_SHEET_ID = ""
+# The usual weekly pattern: Name | Role | Mon … Fri (| Sat | Sun) | From | Until
+# (| Email, optional, for the alert mails). A:Z so a column added later is read.
+# Named, not a bare range: the file has a Notify_list tab too, and a bare range
+# reads whichever tab is first. The tab kept its CSV-import name.
+ROTA_TEAM_RANGE = "'Team.csv'!A:Z"
+# Who is mailed every leave booking and every short-staffed day: any address on
+# this tab of the same spreadsheet, so the list is edited in the sheet. Falls
+# back to the ROTA_ALERT_TO secret when the tab is unreadable or empty.
+ROTA_NOTIFY_RANGE = "Notify_list!A:Z"
+# The exceptions: Name | First day | Last day | Type | Hours | Contact | Note.
+# Point this at the Form's responses tab if one writes here (the Timestamp
+# column it adds is ignored). Set to "" to publish the pattern alone.
+ROTA_LEAVE_RANGE = "Form responses 1!A:J"
+# Where that range lives, if not in ROTA_SHEET_ID — e.g. the Form's own
+# "(Responses)" spreadsheet, or a Leave sheet made separately. Empty = same.
+# This deployment: the separate "Leave" spreadsheet, same Drive.
+ROTA_LEAVE_SHEET_ID = ""
+# Days of rota to publish, from today. Two weeks, like the calendar grid.
+ROTA_SPAN_DAYS = "14"
+# What a pattern cell means when it says only "yes" (or "AM" / "PM").
+ROTA_DEFAULT_HOURS = "08:00-18:00"
+# Decides which calendar day is "today". The Worker runs in UTC, and at
+# 23:30 on a summer evening that is already tomorrow in the office.
+ROTA_TZ = "Europe/London"
+# Every new leave Form submission is mailed to the notify list too.
+# Staffing alert (src/rota_alerts.js): mail the notify list and the
+# person who booked when more than ROTA_ALERT_LIMIT doctors are away for the
+# whole of a normal working day. Roles containing any of the comma-separated
+# words in ROTA_ALERT_EXCLUDE_ROLES don't count. Off while nobody is listed.
+ROTA_ALERT_LIMIT = "3"
+ROTA_ALERT_EXCLUDE_ROLES = "consultant"
+
+# --- Weather. Open-Meteo needs no account and no key, so there is nothing to
+# set beyond where the board is. Coordinates only have to be good to about a
+# kilometre: the forecast model is gridded, so extra decimal places buy nothing.
+# Leave WEATHER_LAT/WEATHER_LON empty to turn the outlook strip off entirely.
+WEATHER_LAT = "51.5074"
+WEATHER_LON = "-0.1278"
+# Decides where Open-Meteo puts the boundary between "today" and "tomorrow".
+WEATHER_TZ = "Europe/London"
+# Label only — shown nowhere the forecast depends on it.
+WEATHER_PLACE = "London"
+
 # Max images accepted from a single email.
 MAX_ATTACHMENTS = "10"
 
@@ -65,9 +114,11 @@ MIN_PHOTO_BYTES = "10240"
 # sits in the middle of that gap, with real margin on both sides — 51200 would
 # have cleared the logos by 200 bytes, which is not a margin.
 MIN_INLINE_PHOTO_BYTES = "81920"
-# Max photos retained in rotation (oldest pruned beyond this). A pinned photo is
-# exempt, so the real ceiling is MAX_PHOTOS + 1 while an aged-out photo is pinned.
-MAX_PHOTOS = "40"
+# Max photos retained in rotation. Oldest beyond this are archived to `removed/`
+# in the bucket, not deleted, so raising this back later is a restore rather than
+# a loss. A pinned photo is exempt, so the real ceiling is MAX_PHOTOS + 1 while
+# an aged-out photo is pinned.
+MAX_PHOTOS = "60"
 # Longest edge for stored photos.
 MAX_IMAGE_EDGE = "1920"
 # Superseded notices kept inside motd.json, so the banner's arrows can step back
@@ -77,5 +128,30 @@ MAX_NOTICE_HISTORY = "5"
 # --- Secrets (set with `wrangler secret put <NAME>`; never commit these) ----
 #   GOOGLE_CLIENT_ID
 #   GOOGLE_CLIENT_SECRET
-#   GOOGLE_REFRESH_TOKEN     <- must cover calendar.readonly, gmail.modify AND
-#                               spreadsheets.readonly
+#   GOOGLE_REFRESH_TOKEN     <- must cover calendar.readonly, gmail.modify,
+#                               spreadsheets.readonly AND forms.body (the last
+#                               for the Form's Name list; without it only that
+#                               step fails, and says so in the log)
+#   DEVICE_TOKEN             <- bearer token required to GET /bundles/*. The app
+#                               bundle can carry build-time secrets (a baked-in
+#                               Tailscale auth key), so it is the one artifact
+#                               here that is not public. Must match DEVICE_TOKEN
+#                               in /etc/default/dashboard-update on each device;
+#                               without it the Worker refuses bundles outright
+#                               (503) rather than quietly serving them to the
+#                               world. `openssl rand -hex 32`.
+#                               See ../docs/tailnet-security.md.
+#   ROTA_FORM_ID             <- the leave Form's ID, from its /forms/d/<ID>/edit
+#                               URL. The rota sync rewrites that Form's Name
+#                               dropdown from the Team tab (src/forms.js). A
+#                               secret, not a var: the same ID opens the Form for
+#                               anonymous submissions. Unset = no Form sync.
+#   ROTA_ALERT_TO            <- comma-separated addresses: the fallback for the
+#                               Notify_list tab (ROTA_NOTIFY_RANGE) when that is
+#                               unreadable or empty.
+#   ADMIN_TOKEN              <- bearer token for the /admin/* triggers. The
+#                               operator's, not the device's: the laptop keeps
+#                               it in .dev.vars. Unset, the operator-only ones
+#                               answer 503; the board's three stay open to
+#                               anonymous calls once a minute regardless.
+#                               See src/admin.js. `openssl rand -hex 32`.

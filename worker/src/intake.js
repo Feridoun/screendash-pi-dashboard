@@ -5,12 +5,17 @@
  * what to do with it, so the Gmail poller (and any future push transport) share
  * exactly one copy of the security gate and the routing rule.
  *
- * The subject decides, and there are four outcomes:
- *   `delete:`   → take photos back down (see below)
- *   `pinphoto:` → hold one photo on screen (see below)
- *   `notice:`   → update the banner
- *   `message:`  → append to the chat feed
+ * The subject carries the command on its own, and the body carries what the
+ * command acts on. There are four commands:
+ *   `delete`   → take photos back down (see below)
+ *   `pinphoto` → hold one photo on screen (see below)
+ *   `notice`   → the body becomes the banner
+ *   `message`  → the body is appended to the chat feed
  *   anything else with image attachments → add photos to the rotation
+ *
+ * A trailing colon is optional — `notice` and `notice:` are the same command —
+ * and the older one-line form (`notice: Coffee machine is fixed`) still works,
+ * with the text after the colon winning over the body. See [parseCommand].
  *
  * Not every image in a mail is a photo, though — see [isDecorativeImage] for the
  * rule that keeps signature logos off the wall.
@@ -25,10 +30,21 @@ import {
 import { writeMotd, cleanText } from './motd.js';
 import { writeMessage } from './messages.js';
 
-const NOTICE_PREFIX = 'notice:';
-const MESSAGE_PREFIX = 'message:';
-const PIN_PREFIX = 'pinphoto:';
-const DELETE_PREFIX = 'delete:';
+/** The four words a subject may carry. */
+const COMMANDS = ['notice', 'message', 'pinphoto', 'delete'];
+
+/**
+ * A subject names a command when it is *only* that word, optionally followed by
+ * a colon and an argument.
+ *
+ * Requiring the colon before an argument is what keeps ordinary mail out:
+ * "Message from the ward manager" is a subject someone wrote, whereas `message`
+ * and `message:` are both plainly the command.
+ */
+const COMMAND_RE = new RegExp(
+  String.raw`^(${COMMANDS.join('|')})\s*(?::\s*([\s\S]*))?$`,
+  'i',
+);
 
 /** What can follow `pinphoto:` to mean "stop pinning". */
 const CLEAR_WORDS = new Set(['', 'clear', 'off', 'none', 'unpin']);
@@ -119,70 +135,121 @@ export function isAllowedAddress(address, allowedCsv) {
 /**
  * Strip however many `Re:` / `Fwd:` prefixes a client has stacked on the front.
  *
- * Only the delete path uses this: removing a photo means replying to the mail
- * that added it, and a reply arrives as `Re: <whatever they originally sent>`.
- * Editing that down to `delete:` is one step people will half-do, so accept
- * `Re: delete:` as meaning what it plainly means.
+ * Acting on a photo means replying to the mail that added it, so a command
+ * routinely arrives as `Re: <whatever they originally sent>`. Editing that down
+ * to the bare command is one step people will half-do, so accept `Re: delete`
+ * as meaning what it plainly means.
  */
 function stripReplyPrefixes(subject = '') {
   return subject.trim().replace(/^((re|fwd|fw)\s*:\s*)+/i, '');
 }
 
-function hasPrefix(subject = '', prefix) {
-  return subject.trim().toLowerCase().startsWith(prefix);
+/**
+ * Split a subject into `{ command, argument }`, or null when it names no
+ * command. The argument is whatever followed a colon, and is usually empty now
+ * that the body is where the content belongs.
+ */
+export function parseCommand(subject = '') {
+  const m = stripReplyPrefixes(subject).match(COMMAND_RE);
+  if (!m) return null;
+  return { command: m[1].toLowerCase(), argument: (m[2] || '').trim() };
 }
 
-function afterPrefix(subject = '', prefix) {
-  return subject.trim().slice(prefix.length).trim();
+/** The argument of `subject`, but only when it names this exact command. */
+function argumentFor(subject, command) {
+  const parsed = parseCommand(subject);
+  return parsed && parsed.command === command ? parsed.argument : '';
+}
+
+function isCommand(subject, command) {
+  const parsed = parseCommand(subject);
+  return Boolean(parsed) && parsed.command === command;
+}
+
+/**
+ * The text a `notice` or `message` carries: the body, which is where it is
+ * meant to go, unless the old one-line form put it after the colon instead.
+ *
+ * Subject-first is deliberate. Bodies arrive with signature blocks and mail
+ * gateway disclaimers stapled on by clients we don't control, so a subject
+ * somebody typed on purpose has to outrank whatever the body happens to carry.
+ */
+function textFor(subject, command, body) {
+  return argumentFor(subject, command) || cleanText(body || '');
+}
+
+/**
+ * An argument read out of the body, for the two commands whose argument is a
+ * single token rather than prose: the first line, and only when it stands alone
+ * as one whitespace-free word.
+ *
+ * Signatures, disclaimers and Outlook's reply headers are all several words
+ * wide, so the one-word rule is what stops a mail client's furniture being read
+ * as a filename.
+ */
+function bodyArgument(body = '') {
+  const [first = ''] = cleanText(body).split('\n');
+  const token = first.trim();
+  return /^\S{1,64}$/.test(token) ? token : '';
 }
 
 /** Does this subject mean "update the banner"? */
 export function isNoticeSubject(subject = '') {
-  return hasPrefix(subject, NOTICE_PREFIX);
+  return isCommand(subject, 'notice');
 }
 
-/** The banner text carried by a notice subject (may be empty = clear the banner). */
+/** The banner text carried by a notice (may be empty = clear the banner). */
 export function noticeTextFrom(subject = '', body = '') {
-  return afterPrefix(subject, NOTICE_PREFIX) || body.trim();
+  return textFor(subject, 'notice', body);
 }
 
 /** Does this subject mean "add this to the chat feed"? */
 export function isMessageSubject(subject = '') {
-  return hasPrefix(subject, MESSAGE_PREFIX);
+  return isCommand(subject, 'message');
 }
 
-/** The chat text carried by a message subject, falling back to the body. */
+/** The chat text carried by a message, from the body or the old subject form. */
 export function messageTextFrom(subject = '', body = '') {
-  return afterPrefix(subject, MESSAGE_PREFIX) || body.trim();
+  return textFor(subject, 'message', body);
 }
 
 /** Does this subject mean "hold a photo on screen"? */
 export function isPinSubject(subject = '') {
-  return hasPrefix(subject, PIN_PREFIX);
+  return isCommand(subject, 'pinphoto');
 }
 
-/** The photo the pin subject names — empty means "clear the pin". */
-export function pinTargetFrom(subject = '') {
-  return afterPrefix(subject, PIN_PREFIX);
+/** The photo the pin names — empty means "clear the pin". */
+export function pinTargetFrom(subject = '', body = '') {
+  return argumentFor(subject, 'pinphoto') || bodyArgument(body);
 }
 
 /** Does this subject mean "take photos back down"? */
 export function isDeleteSubject(subject = '') {
-  return hasPrefix(stripReplyPrefixes(subject), DELETE_PREFIX);
+  return isCommand(subject, 'delete');
 }
 
 /**
- * The photo the delete subject names, if any. Empty is the normal case — it
- * means "the photos this thread added".
+ * The photo the delete names, if any. Empty is the normal case — it means
+ * "the photos this thread added".
  */
-export function deleteTargetFrom(subject = '') {
-  return afterPrefix(stripReplyPrefixes(subject), DELETE_PREFIX);
+export function deleteTargetFrom(subject = '', body = '') {
+  const argument = argumentFor(subject, 'delete');
+  if (argument) return argument;
+
+  // A stray word costs more here than anywhere else: a bare `delete` means
+  // "everything this thread added", which is the common case, and reading a
+  // one-word "Thanks" as a filename would turn that into a failed lookup. A
+  // real target is an ordinal, or part of a machine-generated filename
+  // (`2026-07-28-jsmith-1753…-1.jpg`) — both carry a digit or a dot, and
+  // pleasantries carry neither.
+  const token = bodyArgument(body);
+  return /[\d.]/.test(token) ? token : '';
 }
 
 /**
- * A bare positive integer after `delete:` picks one photo out of the thread by
- * position — `delete: 2` is "the second photo this mail added", counting in the
- * order they arrived, which is the order they sit in the mail.
+ * A bare positive integer as the delete target picks one photo out of the
+ * thread by position — `2` is "the second photo this mail added", counting in
+ * the order they arrived, which is the order they sit in the mail.
  *
  * This is the answer to "one of these three is a dud": filenames are
  * machine-generated and nothing on the wall ever shows one, but anyone can
@@ -201,11 +268,12 @@ function imagesIn(message) {
 }
 
 /**
- * Handle a `pinphoto:` message.
+ * Handle a `pinphoto` message.
  *
- * An attachment wins over the subject text, because "pin the photo I just
+ * An attachment wins over any named target, because "pin the photo I just
  * attached" needs no filename — and filenames are machine-generated, so nobody
- * can type one from memory.
+ * can type one from memory. Otherwise the body names the photo (or says "off"),
+ * falling back to the old `pinphoto: <name>` subject form.
  */
 async function applyPin(env, message, from, images) {
   if (images.length > 0) {
@@ -217,7 +285,7 @@ async function applyPin(env, message, from, images) {
     return `pinned new photo ${file} from ${from}`;
   }
 
-  const target = pinTargetFrom(message.subject);
+  const target = pinTargetFrom(message.subject, message.body);
   if (CLEAR_WORDS.has(target.toLowerCase())) {
     await setPin(env, null, from);
     return `pin cleared by ${from}`;
@@ -233,24 +301,24 @@ async function applyPin(env, message, from, images) {
 }
 
 /**
- * Handle a `delete:` message.
+ * Handle a `delete` message.
  *
  * Photos are identified by the mail that added them, not by name: open the
- * mailbox, find that mail, reply to it with the subject `delete:`. Filenames
+ * mailbox, find that mail, reply to it with the subject `delete`. Filenames
  * are machine-generated and nothing on the wall displays one, so the
  * originating email is the only handle on a photo that anyone actually has.
  *
- * Three ways to say which:
- *   `delete:`            every photo that mail added
- *   `delete: 2`          just the second one (see [deleteOrdinalFrom])
- *   `delete: <fragment>` by filename, for a photo whose mail is long gone
+ * Three ways to say which, the body naming the target as everywhere else:
+ *   subject `delete`, empty body   every photo that mail added
+ *   body `2`                       just the second one (see [deleteOrdinalFrom])
+ *   body `<fragment>`              by filename, for a photo whose mail is gone
  *
  * Attachments are ignored outright: a *forward* carries the original images,
  * and re-adding what you were asked to remove is the one outcome here that
  * would be actively confusing.
  */
 async function applyDelete(env, message, from) {
-  const target = deleteTargetFrom(message.subject);
+  const target = deleteTargetFrom(message.subject, message.body);
   const ordinal = deleteOrdinalFrom(target);
 
   // Text that isn't a bare number is a filename fragment.
@@ -269,7 +337,8 @@ async function applyDelete(env, message, from) {
 
   if (matched === 0) {
     return `delete failed: no photos traced to this thread (${from}) — `
-      + 'reply to the mail that added them, or send "delete: <filename fragment>"';
+      + 'reply to the mail that added them, or send subject "delete" with the '
+      + 'filename fragment in the body';
   }
   // Asking for the 4th of three is a typo worth naming, not a silent no-op.
   if (removed.length === 0) {
@@ -284,9 +353,9 @@ async function applyDelete(env, message, from) {
  *
  * `message` is `{ from, subject, body, attachments, threadId, messageId,
  * references }` where each attachment is `{ mimeType, content:
- * ArrayBuffer|Uint8Array }` — the shape photos.js expects. The three mail
- * identity fields are only load-bearing for `delete:`; everything else ignores
- * them.
+ * ArrayBuffer|Uint8Array }` — the shape photos.js expects. The subject names the
+ * command and the body carries its content. The three mail identity fields are
+ * only load-bearing for `delete`; everything else ignores them.
  *
  * Returns a short string describing what happened, for logging.
  */
@@ -306,24 +375,25 @@ export async function applyMessage(env, message) {
   }
 
   const images = imagesIn(message);
+  const command = parseCommand(message.subject)?.command;
 
   // Checked first: it is the one destructive branch, and it must not fall
   // through to the "has images, so store them" rule below.
-  if (isDeleteSubject(message.subject)) {
+  if (command === 'delete') {
     return applyDelete(env, message, from);
   }
 
-  if (isPinSubject(message.subject)) {
+  if (command === 'pinphoto') {
     return applyPin(env, message, from, images);
   }
 
-  if (isNoticeSubject(message.subject)) {
+  if (command === 'notice') {
     const text = noticeTextFrom(message.subject, message.body);
     await writeMotd(env, { text, from, body: message.body || '' });
     return `notice updated by ${from}: ${text.slice(0, 60)}`;
   }
 
-  if (isMessageSubject(message.subject)) {
+  if (command === 'message') {
     const text = cleanText(messageTextFrom(message.subject, message.body));
     if (!text) return `message ignored: empty (${from})`;
     await writeMessage(env, { sender: displayNameFrom(message.from), text });
@@ -331,7 +401,7 @@ export async function applyMessage(env, message) {
   }
 
   if (images.length === 0) {
-    return `ignored: no images and no "notice:"/"message:"/"pinphoto:"/"delete:" subject (${from})`;
+    return `ignored: no images, and the subject is not "notice"/"message"/"pinphoto"/"delete" (${from})`;
   }
 
   const max = parseInt(env.MAX_ATTACHMENTS || '10', 10);

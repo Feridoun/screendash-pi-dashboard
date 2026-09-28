@@ -21,8 +21,9 @@ enum DisplayState { active, dimmed, blanked }
 /// it survives DST changes and month-long uptimes.
 ///
 /// Two manual escapes sit on top of the schedule:
-///   - [wake] — a tap on a dimmed/blanked screen relights the panel for
-///     [AppConfig.wakeDuration], then the schedule resumes.
+///   - [wake] — mouse movement over a dimmed/blanked screen (or a tap, for
+///     touch panels with no hover) relights it for [AppConfig.wakeDuration],
+///     then the schedule resumes.
 ///   - [updateSchedule] — the on-screen dim-schedule modal edits the hours, and
 ///     the result is written to a small JSON file so it survives a reboot. The
 ///     [AppConfig] dart-defines remain the defaults behind it.
@@ -55,7 +56,7 @@ class DimController extends ChangeNotifier {
   int get dimmedEndHour => _schedule.dimmedEndHour;
   double get dimmedScrimOpacity => _schedule.dimmedScrimOpacity;
 
-  /// True while a tap is holding the panel lit against the schedule.
+  /// True while a manual wake is holding the panel lit against the schedule.
   bool get isAwake => _awake;
 
   /// True when the screen is currently covered by any scrim — i.e. a tap would
@@ -92,8 +93,9 @@ class DimController extends ChangeNotifier {
     await _evaluate();
   }
 
-  /// Relight the panel for [AppConfig.wakeDuration]. Tapping again while awake
-  /// restarts the countdown rather than stacking timers.
+  /// Relight the panel for [AppConfig.wakeDuration]. Waking again while already
+  /// awake restarts the countdown rather than stacking timers — which is what
+  /// keeps a continuously-moving mouse from letting the screen drop away.
   void wake() {
     _wakeTimer?.cancel();
     _wakeTimer = Timer(AppConfig.wakeDuration, _endWake);

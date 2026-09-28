@@ -1,0 +1,152 @@
+// Tailnet access policy for the screendash board.
+//
+// Paste this into the Tailscale admin console under Access controls
+// (https://login.tailscale.com/admin/acls), or sync it from this file with
+// tailscale/gitops-acl-action. It is HuJSON, so these comments are legal.
+//
+// WHY THIS FILE EXISTS
+// -------------------
+// A new tailnet's default policy is "allow all sources to all destinations on
+// all ports". The board hangs on a wall in a public corridor, and physical
+// access to a Pi is root access -- pull the SD card, edit /etc/shadow, boot.
+// Under the default policy that turns one stolen board into a foothold on every
+// other node you own: your dev box, the Guacamole host, anything else you have
+// joined. Tailscale does NOT bridge networks by itself, so your home LAN is not
+// reachable from the board (that needs a subnet router advertising routes AND
+// the board accepting them -- see docs/tailnet-security.md), but the tailnet is
+// usually the more valuable prize anyway.
+//
+// The policy below makes the board a destination ONLY. No rule anywhere lists
+// tag:kiosk as a source, so a compromised board can open a connection to
+// nothing on the tailnet. It also stops the board enumerating your other nodes
+// over MagicDNS.
+//
+// WHAT IT DOES NOT DO
+// - It does not restrict the board's ordinary internet access. Tailnet ACLs
+//   govern tailnet traffic only; the Pi keeps polling the Worker origin exactly
+//   as before, and the admin panel keeps working.
+// - It does not stop someone with the board in their hands reading what is on
+//   its disk. Assume the node key and anything baked into the bundle is theirs.
+//   Containment, not prevention, is the goal.
+//
+// APPLYING IT TO A BOARD THAT IS ALREADY ON THE TAILNET
+//
+// !! READ THIS BEFORE SAVING. Saving this policy while the board is still
+// !! UNTAGGED locks you out of it. Every rule below names tag:kiosk, an
+// !! untagged node matches none of them, and the default is deny -- so you
+// !! lose SSH (22) AND VNC (5901) at the same moment, and Tailscale SSH has
+// !! claimed port 22 so OpenSSH is not a fallback. The only way back in is
+// !! physical access to the board.
+//
+// You cannot dodge it by tagging first: a node can only advertise a tag that
+// already exists in tagOwners, so the policy has to be saved before the board
+// can join tag:kiosk. That window is the hazard. Bridge it with the
+// TRANSITIONAL rules at the end of the acls and ssh blocks below:
+//
+//   1. Uncomment both TRANSITIONAL rules, then save the policy.
+//   2. Re-authenticate the board (command below). Your existing session stays
+//      up because the transitional rules cover untagged nodes you own.
+//   3. Confirm the tag landed: `tailscale status --json`, or the Machines page.
+//      An untagged board is covered by NOTHING here and still inherits the
+//      tailnet default.
+//   4. Delete the transitional rules and save again. Verify you can still
+//      reach the board on 22 and 5901 before you walk away.
+//
+// A node only gets a tag when it authenticates with one, so:
+//     sudo tailscale up --advertise-tags=tag:kiosk --ssh --accept-routes=false
+// (or, from the hidden admin panel, join with a tagged auth key -- the panel
+// passes --advertise-tags for you). Note this re-registers the node, so it will
+// drop the very SSH session you are typing into: run it from the admin panel, or
+// expect to reconnect.
+{
+  "tagOwners": {
+    // tag:kiosk  the screendash board(s) on public walls.
+    // tag:relay  the Tailscale sidecar next to Guacamole that fronts VNC
+    //            (docs/remote-desktop.md). Tagging it too keeps a compromised
+    //            server container from ranging over the tailnet either.
+    "tag:kiosk": ["autogroup:admin"],
+    "tag:relay": ["autogroup:admin"],
+  },
+
+  "acls": [
+    // People reach the board. Two ports and no more:
+    //   22    OpenSSH -- what `deploy.sh provision` uses.
+    //   5901  TigerVNC :1, already restricted to the tailscale0 interface on the
+    //         device itself by deploy/dashboard-vnc-firewall.service. This is
+    //         the second half of that: the firewall says "tailnet only", this
+    //         says "and only these tailnet nodes".
+    // autogroup:member is your own users; it excludes tagged devices and
+    // excludes anyone a shared node belongs to.
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["tag:kiosk:22,5901"],
+    },
+
+    // The Guacamole sidecar only ever needs VNC.
+    {
+      "action": "accept",
+      "src": ["tag:relay"],
+      "dst": ["tag:kiosk:5901"],
+    },
+
+    // TRANSITIONAL -- uncomment only for the migration described at the top of
+    // this file, and DELETE once `tailscale status` shows tag:kiosk on the
+    // board. It lets your own untagged devices reach your own untagged devices,
+    // which is what keeps SSH and VNC alive during the window between saving
+    // this policy and the board re-authenticating into the tag.
+    // {
+    //   "action": "accept",
+    //   "src": ["autogroup:member"],
+    //   "dst": ["autogroup:self:22,5901"],
+    // },
+  ],
+
+  // Tailscale SSH is a SEPARATE gate from the acls above: the board runs
+  // `tailscale up --ssh`, and that does nothing at all without a rule here.
+  // Plain OpenSSH on port 22 is covered by the acls block instead. Both paths
+  // are wanted -- Tailscale SSH gives you key-free access from the console,
+  // OpenSSH is what the deploy script drives.
+  "ssh": [
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["tag:kiosk"],
+      "users": ["pi"],
+    },
+
+    // TRANSITIONAL -- same migration, same deletion. Tailscale SSH is gated
+    // separately from the acls block, so without this you lose the shell even
+    // though the transitional acl rule above opens port 22.
+    // {
+    //   "action": "accept",
+    //   "src": ["autogroup:member"],
+    //   "dst": ["autogroup:self"],
+    //   "users": ["pi"],
+    // },
+  ],
+
+  // Tests are worth adding once, but they need a REAL user address from your
+  // tailnet -- the console rejects a policy whose tests name someone who isn't
+  // a member. Uncomment and substitute your own login:
+  //
+  // "tests": [
+  //   {
+  //     "src": "you@example.com",
+  //     "accept": ["tag:kiosk:22", "tag:kiosk:5901"],
+  //   },
+  //   {
+  //     // The point of the whole file: the board can reach nothing.
+  //     //
+  //     // Only TAGS work as destinations here. An autogroup cannot be a test
+  //     // destination at all -- `autogroup:member:22` is rejected as "too many
+  //     // colons in address", and bare `autogroup:member` is rejected as
+  //     // "unknown user or host: autogroup" because the parser splits it into
+  //     // host=autogroup port=member. Autogroups are source-side only.
+  //     // So this asserts the board cannot reach the relay; the "cannot reach
+  //     // your laptop" half is simply not expressible as a test.
+  //     "src": "tag:kiosk",
+  //     "deny": ["tag:relay:5901"],
+  //   },
+  // ],
+}
